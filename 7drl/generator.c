@@ -179,7 +179,7 @@ void pick_cell(ivec2_t *l, cells_t *c, int len, int *x, int *y, int no[CELL_TYPE
   }
 }
 
-int generate_cells(cells_t *c, int size, int tidyness, int *sx, int *sy, int *ex, int *ey)
+int generate_cells(cells_t *c, int size, int tidyness)
 {
   size = MAX(8, MIN(size, CELL_MAX-1));
   c->size = size;
@@ -227,11 +227,6 @@ int generate_cells(cells_t *c, int size, int tidyness, int *sx, int *sy, int *ex
 
   int end_x = (int)dx, end_y = (int)dy;
   int ix = start_x, iy = start_y;
-
-  *sx = start_x;
-  *sy = start_y;
-  *ex = end_x;
-  *ey = end_y;
 
   c->cells[end_y][end_x] = CELL_END;
 
@@ -1090,7 +1085,7 @@ int gen(map_t *map)
 {
   // generate initial level layout
   cells_t cells;
-  while (!generate_cells(&cells, 50, 1, &map->sx, &map->sy, &map->ex, &map->ey)) {
+  while (!generate_cells(&cells, 50, 1)) {
     printf("Failed generating cells, retrying\n");
   }
 
@@ -1098,6 +1093,28 @@ int gen(map_t *map)
   chunk_t level;
   while (!generate_chunks(&cells, &level)) {
     printf("Failed generating chunks, retrying\n");
+  }
+
+  int set_start = 0, set_end = 0;
+  for (;;) {
+    int x = rand() % level.width;
+    int y = rand() % level.height;
+    if (level.tiles[(y*level.width)+x] != '!')
+      continue;
+
+    if (!set_start && roll(100) == 1) {
+      map->sx = x;
+      map->sy = y;
+      set_start = 1;
+    }
+    if (!set_end && roll(100) == 1) {
+      map->ex = x;
+      map->ey = y;
+      set_end = 1;
+    }
+
+    if (set_start && set_end)
+      break;
   }
 
   // convert to appropriate tile values

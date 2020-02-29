@@ -1,5 +1,5 @@
 CC     =emcc
-CFLAGS =-g -Wall -O3 -r -std=c99 -lSDL2 -s USE_SDL=2 -s USE_WEBGL2=0 -s ALLOW_MEMORY_GROWTH=1 -s EMULATE_FUNCTION_POINTER_CASTS=0 --closure 1 -flto --llvm-lto 1 -s INLINING_LIMIT=1
+CFLAGS =-g -Wall -Wno-unused -O3 -r -std=c99 -lSDL2 -s USE_SDL=2 -s USE_WEBGL2=0 -s ALLOW_MEMORY_GROWTH=1 -s EMULATE_FUNCTION_POINTER_CASTS=0 --closure 1 -flto --llvm-lto 1 -s INLINING_LIMIT=1
 ODIR   =obj
 BDIR   =build
 BIN    =rl.bc

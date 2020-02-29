@@ -15,27 +15,29 @@
 SDL_Window *window;
 SDL_Renderer *renderer;
 
+// camera vars
 float camx = 512.0f, camy = 512.0f;
 float cx = 0.0f, cy = 0.0f;
-float zoom = 1.0f;
+
+// runs an update pass on all entites when set
+int update = 0;
 
 // delta time vars
 const double phys_delta_time   = 1.0 / 60.0;
 const double slowest_frame     = 1.0 / 15.0;
 double delta_time, tick        = 0.0;
 double last_frame_time         = 0.0;
-int frame = 0;
+int init = 0;
 
+// level vars
 SDL_Texture *tex_tiles, *tex_map;
 int tiles_tex_width = 0, tiles_tex_height = 0;
-
 level_t level;
 level_texture_t level_textures;
+int level_width = 0, level_height = 0;
 
-int *dmap;
-
+// input
 uint8_t keys_down[SDL_NUM_SCANCODES];
-
 void keypressed(int key);
 void input(SDL_Event *event);
 
@@ -44,7 +46,9 @@ void loop()
   /*-----------------------------------------/
   /---------------- INIT STUFF --------------/
   /-----------------------------------------*/
-  if (!frame++) {
+  if (!init) {
+    init++;
+
     // init SDL
     if (!SDL_Init(SDL_INIT_EVERYTHING)) {
       printf("Failed to init SDL2\n");
@@ -65,6 +69,7 @@ void loop()
 
     // load textures
     tex_tiles = texture_load("tiles.png", &tiles_tex_width, &tiles_tex_height);
+    SDL_SetTextureBlendMode(tex_tiles, SDL_BLENDMODE_BLEND);
 
     // screen render target
     tex_map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, window_width, game_height);
@@ -81,20 +86,21 @@ void loop()
     for (int i=0; i<2; i++) {
       while (!gen(&level.layers[i])) {};
     }
+    level_width  = level.layers[level.layer].width;
+    level_height = level.layers[level.layer].height;
 
     // init entity stuff
     entity_init();
 
     // init player
     player_init();
+    player->pos.x = level.layers[level.layer].sx;
+    player->pos.y = level.layers[level.layer].sy;
+    player->to.x  = level.layers[level.layer].sx;
+    player->to.y  = level.layers[level.layer].sy;
 
     // setup vga atlas etc
     text_init();
-
-    // !! test junk !!
-    int w = level.layers[level.layer].width;
-    int h = level.layers[level.layer].height;
-    dmap = malloc(sizeof(int) * w * h);
   }
   /*----------------------------------------*/
 
@@ -145,22 +151,17 @@ void loop()
     }
   }
 
-  float speed = 500.0f;
-  if (keys_down[SDL_SCANCODE_LEFT])
-    camx -= speed * delta_time;
-  if (keys_down[SDL_SCANCODE_RIGHT])
-    camx += speed * delta_time;
-  if (keys_down[SDL_SCANCODE_UP])
-    camy -= speed * delta_time;
-  if (keys_down[SDL_SCANCODE_DOWN])
-    camy += speed * delta_time;
-  zoom = MAX(zoom, 0.5f);
-  if (keys_down[SDL_SCANCODE_SPACE]) {
-    player->to.x = floor(camx/16);
-    player->to.y = floor(camy/16);
+  if (player != NULL && player->alive) {
+    camx += ((player->to.x*16.0f) - camx) * 8.0f * delta_time;
+    camy += ((player->to.y*16.0f) - camy) * 8.0f * delta_time;
   }
 
-  entity_update();
+  // repeat until all are done updating
+  if (update && tick > 1.0f / 16.0f) {
+    update = entity_update();
+    tick = 0.0f;
+  }
+  entity_update_render();
   /*----------------------------------------*/
 
 
@@ -179,12 +180,12 @@ void loop()
       level_textures.chunks[index].tile_count = 0;
 
       SDL_SetRenderTarget(renderer, level_textures.chunks[index].tex);
-      SDL_SetRenderDrawColor(renderer, 17, 17, 17, 255);
+      SDL_SetRenderDrawColor(renderer, 15, 15, 38, 255);
       SDL_RenderClear(renderer);
 
       SDL_Rect ra, rb;
-      int w  = level.layers[level.layer].width;
-      int h  = level.layers[level.layer].height;
+      int w  = level_width;
+      int h  = level_height;
       int tw = tiles_tex_width  / tile_width;
       int fromx = (ix*CHUNK_SIZE) / tile_width;
       int fromy = (iy*CHUNK_SIZE) / tile_height;
@@ -226,17 +227,16 @@ void loop()
   /---------------- CHUNKS TO TEXTURE -------/
   /-----------------------------------------*/
   SDL_SetRenderTarget(renderer, tex_map);
-  SDL_SetRenderDrawColor(renderer, 17, 17, 17, 255);
+  SDL_SetRenderDrawColor(renderer, 15, 15, 38, 255);
   SDL_RenderClear(renderer);
 
   SDL_Rect r;
-  cx = ((camx + tile_width / 2) * zoom) - (window_width / 2);
-  cy = ((camy + tile_height / 2) * zoom) - (game_height / 2);
-  int rzoom = zoom * (float)CHUNK_SIZE;
-  int fromx = floor(cx / (float)rzoom);
-  int fromy = floor(cy / (float)rzoom);
-  int tox = fromx + ceil((float)(window_width + rzoom) / (float)rzoom);
-  int toy = fromy + ceil((float)(game_height + rzoom) / (float)rzoom);
+  cx = (camx + tile_width / 2) - (window_width / 2);
+  cy = (camy + tile_height / 2) - (game_height / 2);
+  int fromx = floor(cx / (float)CHUNK_SIZE);
+  int fromy = floor(cy / (float)CHUNK_SIZE);
+  int tox = fromx + ceil((float)(window_width + CHUNK_SIZE) / (float)CHUNK_SIZE);
+  int toy = fromy + ceil((float)(game_height + CHUNK_SIZE) / (float)CHUNK_SIZE);
   for (int y=fromy; y<toy; y++) {
     for (int x=fromx; x<tox; x++) {
       if (x < 0 || y < 0 || x >= CHUNK_STRIDE || y >= CHUNK_STRIDE)
@@ -247,10 +247,10 @@ void loop()
       if (!level_textures.chunks[index].tile_count)
         continue;
 
-      r.x = (int)((x * rzoom) - (cx));
-      r.y = (int)((y * rzoom) - (cy));
-      r.w = (int)rzoom;
-      r.h = (int)rzoom;
+      r.x = (int)((x * (CHUNK_SIZE + 1)) - (cx));
+      r.y = (int)((y * (CHUNK_SIZE + 1)) - (cy));
+      r.w = (int)CHUNK_SIZE;
+      r.h = (int)CHUNK_SIZE;
 
       SDL_RenderCopy(renderer, level_textures.chunks[index].tex, NULL, &r);
     }
@@ -269,13 +269,8 @@ void loop()
   r.x = 0, r.y = 0, r.w = window_width, r.h = game_height;
   SDL_RenderCopy(renderer, tex_map, NULL, &r);
 
-  // debug box
-  SDL_SetRenderDrawColor(renderer, 255, 0, 0, 10);
-  r.x = (window_width / 2) - (8 * zoom);
-  r.y = (game_height / 2) - (8 * zoom);
-  r.w = (16 * zoom);
-  r.h = (16 * zoom);
-  SDL_RenderDrawRect(renderer, &r);
+  // render entities
+  entity_render();
 
   int w = level.layers[level.layer].width;
   int h = level.layers[level.layer].height;
@@ -285,25 +280,18 @@ void loop()
       int index = (y*w)+x;
       if (tiles[index] != 2 && tiles[index] != 3)
         continue;
-      int val = dmap[index];
+      int val = player->dmap[index];
       if (val > 50)
         continue;
-      r.x = ((x*16)*zoom)-cx;
-      r.y = ((y*16)*zoom)-cy;
-      int c = 200*(1.0-((float)val/50));
-      SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-      SDL_SetRenderDrawColor(renderer, c, c, 0, c);
-      if (val == 0)
-        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
-      SDL_RenderFillRect(renderer, &r);
-      // char buf[32];
+      r.x = (x*16)-cx;
+      r.y = (y*16)-cy;
+      char buf[32];
       // sprintf(buf, "%01i", val);
       // text_render(buf, (x*16)-cx, (y*16)-cy);
     }
   }
 
-  entity_render();
-
+  // render text box
   text_log_render();
 
   SDL_RenderPresent(renderer);
@@ -319,31 +307,18 @@ void keypressed(int key)
   buff[l] = '\0';
   text_log_add(buff);
 
-  if (keys_down[SDL_SCANCODE_EQUALS])
-    zoom += 0.5f;
-  if (keys_down[SDL_SCANCODE_MINUS])
-    zoom -= 0.5f;
+  player_keypress(key);
+}
 
-  // test dmap
-  if (key == SDL_SCANCODE_R) {
-    int w = level.layers[level.layer].width;
-    int h = level.layers[level.layer].height;
-    char *tiles = level.layers[level.layer].tiles;
-    memset(dmap, DIJ_MAX, sizeof(int) * w * h);
-    for (int i=0; i<w*h; i++)
-      dmap[i] = DIJ_MAX;
+void mousepress(int key)
+{
+  int mx, my;
+  if (SDL_GetRelativeMouseMode())
+    SDL_GetRelativeMouseState(&mx, &my);
+  else
+    SDL_GetMouseState(&mx, &my);
 
-    int x = MAX(0, MIN(camx / 16, w));
-    int y = MAX(0, MIN(camy / 16, h));
-
-    dmap[(y*w)+x] = 0;
-
-    int walkable[10] = {-1};
-    walkable[0] = 2; // floor
-    walkable[1] = 3; // floor
-    walkable[2] = 4; // door
-    dijkstra(dmap, tiles, walkable, 0, 0, w, h, w, h);
-  }
+  player_mousepress(key, mx, my);
 }
 
 void input(SDL_Event *event)
@@ -360,6 +335,9 @@ void input(SDL_Event *event)
       int key = event->key.keysym.scancode;
       keys_down[key] = 0;
       break;
+    }
+    case SDL_MOUSEBUTTONDOWN: {
+      mousepress(event->button.button);
     }
   }
 }

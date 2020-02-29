@@ -43,6 +43,17 @@ static int around[8][2] = {
   {-1, 0},
 };
 
+static int around_adjacent[8][2] = {
+  {-1, 0},
+  {1,  0},
+  {0, -1},
+  {0,  1},
+  {-1,-1},
+  {1, -1},
+  {1,  1},
+  {-1, 1}
+};
+
 static float lerp(float a, float b, float f) {
   return a + f * (b - a);
 }

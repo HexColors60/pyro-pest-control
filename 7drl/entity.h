@@ -9,6 +9,10 @@ typedef struct {
   fvec2_t pos, to;
   ivec2_t tiles[2];
   int alive, animated, frame;
+  int projectile;
+
+  int walking, speed;
+  int *dmap;
 
   void (*onhit)();
   void (*update)();
@@ -16,7 +20,9 @@ typedef struct {
 
 void entity_init();
 
-void entity_update();
+int entity_update();
+
+void entity_update_render();
 
 entity_t *entity_new();
 

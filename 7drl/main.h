@@ -18,6 +18,8 @@ static const int tile_height   = 16;
 extern double delta_time, tick;
 extern float camx, camy, cx, cy, zoom;
 
+extern int update;
+
 extern int tiles_tex_width, tiles_tex_height;
 
 extern SDL_Texture *tex_tiles;
@@ -47,5 +49,6 @@ typedef struct {
 
 extern level_t level;
 extern level_texture_t level_textures;
+extern int level_width, level_height;
 
 #endif // MAIN_H
