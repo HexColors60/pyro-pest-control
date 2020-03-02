@@ -1120,24 +1120,43 @@ int gen(map_t *map)
   // convert to appropriate tile values
   map->tiles = malloc(sizeof(uint8_t) * level.width * level.height);
   memset(map->tiles, 0, sizeof(uint8_t) * level.width * level.height);
-  for (int i=0; i<level.width * level.height; i++) {
-    map->tiles[i] = 0;
-    switch (level.tiles[i]) {
-      case '#': {
-        map->tiles[i] = 1;
-        break;
-      }
-      case '!': {
-        map->tiles[i] = 2;
-        break;
-      }
-      case '.': {
-        map->tiles[i] = 3;
-        break;
-      }
-      case 'D': {
-        map->tiles[i] = 4;
-        break;
+  int max = level.width * level.height;
+
+  for (int y=0; y<level.height; y++) {
+    for (int x=0; x<level.width; x++) {
+      int index = (y*level.width)+x;
+      map->tiles[index] = 0;
+
+      int left  = level.tiles[MAX(0, MIN((y*level.width)+x-1, max))];
+      int right = level.tiles[MAX(0, MIN((y*level.width)+x+1, max))];
+      int up    = level.tiles[MAX(0, MIN(((y-1)*level.width)+x, max))];
+      int down  = level.tiles[MAX(0, MIN(((y+1)*level.width)+x, max))];
+
+      switch (level.tiles[index]) {
+        case '#': {
+          int tile = TILE_STONE_VWALL;
+
+          // top left corner
+          if ((left == '#' || right == '#') && down != '#' && down != 'D')
+            tile = TILE_STONE_HWALL;
+          // if (up == '#' && down == 'D')
+            // tile = TILE_STONE_HWALL;
+
+          map->tiles[index] = tile;
+          break;
+        }
+        case '!': {
+          map->tiles[index] = TILE_WOOD_FLOOR;
+          break;
+        }
+        case '.': {
+          map->tiles[index] = TILE_STONE_FLOOR;
+          break;
+        }
+        case 'D': {
+          map->tiles[index] = TILE_DOOR_CLOSED;
+          break;
+        }
       }
     }
   }

@@ -3,19 +3,17 @@
 
 #include "math.h"
 
-// typedef void (*onhit)
-
 typedef struct {
   fvec2_t pos, to;
   ivec2_t tiles[2];
   int alive, animated, frame;
-  int projectile;
 
   int walking, speed;
   int *dmap;
 
-  void (*onhit)();
-  void (*update)();
+  void (*onhit)(void *e);
+  void (*update)(void *e);
+  void (*ondeath)(void *e);
 } entity_t;
 
 void entity_init();

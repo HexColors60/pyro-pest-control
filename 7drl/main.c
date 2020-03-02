@@ -18,6 +18,7 @@ SDL_Renderer *renderer;
 // camera vars
 float camx = 512.0f, camy = 512.0f;
 float cx = 0.0f, cy = 0.0f;
+int mx, my;
 
 // runs an update pass on all entites when set
 int update = 0;
@@ -30,7 +31,7 @@ double last_frame_time         = 0.0;
 int init = 0;
 
 // level vars
-SDL_Texture *tex_tiles, *tex_map;
+SDL_Texture *tex_tiles, *tex_map, *tex_fov;
 int tiles_tex_width = 0, tiles_tex_height = 0;
 level_t level;
 level_texture_t level_textures;
@@ -74,8 +75,12 @@ void loop()
     // screen render target
     tex_map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, window_width, game_height);
 
+    // field of view light map
+    tex_fov = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, (window_width / tile_width) + 2, (game_height / tile_height) + 2);
+    SDL_SetTextureBlendMode(tex_fov, SDL_BLENDMODE_BLEND);
+
     for (int i=0; i<CHUNK_COUNT; i++) {
-      level_textures.chunks[i].tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, CHUNK_SIZE, CHUNK_SIZE);
+      level_textures.chunks[i].tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, CHUNK_WIDTH, CHUNK_HEIGHT);
       level_textures.chunks[i].update     = 1;
       level_textures.chunks[i].tile_count = 0;
     }
@@ -151,9 +156,15 @@ void loop()
     }
   }
 
+  // update mouse coords
+  if (SDL_GetRelativeMouseMode())
+    SDL_GetRelativeMouseState(&mx, &my);
+  else
+    SDL_GetMouseState(&mx, &my);
+
   if (player != NULL && player->alive) {
-    camx += ((player->to.x*16.0f) - camx) * 8.0f * delta_time;
-    camy += ((player->to.y*16.0f) - camy) * 8.0f * delta_time;
+    camx += ((player->to.x*tile_width) - camx) * 8.0f * delta_time;
+    camy += ((player->to.y*tile_height) - camy) * 8.0f * delta_time;
   }
 
   // repeat until all are done updating
@@ -180,17 +191,17 @@ void loop()
       level_textures.chunks[index].tile_count = 0;
 
       SDL_SetRenderTarget(renderer, level_textures.chunks[index].tex);
-      SDL_SetRenderDrawColor(renderer, 15, 15, 38, 255);
+      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
       SDL_RenderClear(renderer);
 
       SDL_Rect ra, rb;
       int w  = level_width;
       int h  = level_height;
-      int tw = tiles_tex_width  / tile_width;
-      int fromx = (ix*CHUNK_SIZE) / tile_width;
-      int fromy = (iy*CHUNK_SIZE) / tile_height;
-      int tox = fromx + (CHUNK_SIZE / tile_width);
-      int toy = fromy + (CHUNK_SIZE / tile_height);
+      int tw = tiles_tex_width  / rtile_width;
+      int fromx = (ix*CHUNK_WIDTH) / tile_width;
+      int fromy = (iy*CHUNK_HEIGHT) / tile_height;
+      int tox = fromx + (CHUNK_WIDTH / tile_width);
+      int toy = fromy + (CHUNK_HEIGHT / tile_height);
       for (int y=fromy; y<toy; y++) {
         for (int x=fromx; x<tox; x++) {
           // current tile
@@ -202,10 +213,10 @@ void loop()
             continue;
 
           // position of tile in texture
-          ra.x = (tile - ((tile / tw) * tw)) * tile_width;
-          ra.y = (tile / tw) * tile_height;
-          ra.w = tile_width;
-          ra.h = tile_height;
+          ra.x = (tile - ((tile / tw) * tw)) * rtile_width;
+          ra.y = (tile / tw) * rtile_height;
+          ra.w = rtile_width;
+          ra.h = rtile_height;
 
           // position of tile in map
           rb.x = (x - fromx) * tile_width;
@@ -227,16 +238,16 @@ void loop()
   /---------------- CHUNKS TO TEXTURE -------/
   /-----------------------------------------*/
   SDL_SetRenderTarget(renderer, tex_map);
-  SDL_SetRenderDrawColor(renderer, 15, 15, 38, 255);
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
   SDL_RenderClear(renderer);
 
   SDL_Rect r;
   cx = (camx + tile_width / 2) - (window_width / 2);
   cy = (camy + tile_height / 2) - (game_height / 2);
-  int fromx = floor(cx / (float)CHUNK_SIZE);
-  int fromy = floor(cy / (float)CHUNK_SIZE);
-  int tox = fromx + ceil((float)(window_width + CHUNK_SIZE) / (float)CHUNK_SIZE);
-  int toy = fromy + ceil((float)(game_height + CHUNK_SIZE) / (float)CHUNK_SIZE);
+  int fromx = floor(cx / (float)CHUNK_WIDTH);
+  int fromy = floor(cy / (float)CHUNK_HEIGHT);
+  int tox = fromx + ceil((float)(window_width + CHUNK_WIDTH) / (float)CHUNK_WIDTH);
+  int toy = fromy + ceil((float)(game_height + CHUNK_HEIGHT) / (float)CHUNK_HEIGHT);
   for (int y=fromy; y<toy; y++) {
     for (int x=fromx; x<tox; x++) {
       if (x < 0 || y < 0 || x >= CHUNK_STRIDE || y >= CHUNK_STRIDE)
@@ -247,10 +258,10 @@ void loop()
       if (!level_textures.chunks[index].tile_count)
         continue;
 
-      r.x = (int)((x * (CHUNK_SIZE + 1)) - (cx));
-      r.y = (int)((y * (CHUNK_SIZE + 1)) - (cy));
-      r.w = (int)CHUNK_SIZE;
-      r.h = (int)CHUNK_SIZE;
+      r.x = (int)floor(((x * CHUNK_WIDTH) - (cx)));
+      r.y = (int)floor(((y * CHUNK_HEIGHT) - (cy)));
+      r.w = (int)CHUNK_WIDTH;
+      r.h = (int)CHUNK_HEIGHT;
 
       SDL_RenderCopy(renderer, level_textures.chunks[index].tex, NULL, &r);
     }
@@ -260,10 +271,41 @@ void loop()
 
 
   /*-----------------------------------------/
+  /---------------- FOV LIGHT MAP -----------/
+  /-----------------------------------------*/
+  SDL_SetRenderTarget(renderer, tex_fov);
+
+  SDL_Rect src;
+  src.x = cx; src.y = cy;
+  src.w = (window_width / tile_width);
+  src.h = (game_height / tile_height);
+
+  uint8_t *pixels = NULL;
+  int pitch = 0;
+  SDL_LockTexture(tex_fov, NULL, (void**)&pixels, &pitch);
+
+  fromx = floor(cx / tile_width);
+  fromy = floor(cy / tile_height);
+  tox = fromx + (window_width / tile_width);
+  toy = fromy + (game_height / tile_height);
+  int count = ((window_width / tile_width) + 2) * 4;
+  for (int y=fromy; y<toy; y++) {
+    if (y > level_height)
+      break;
+    memcpy(&pixels[(y-fromy)*pitch], &light_map[((y*level_width)+fromx)*4], count);
+  }
+
+  SDL_UnlockTexture(tex_fov);
+  /*----------------------------------------*/
+
+
+
+  /*-----------------------------------------/
   /---------------- RENDER ------------------/
   /-----------------------------------------*/
   // render to default target
   SDL_SetRenderTarget(renderer, NULL);
+  SDL_RenderClear(renderer);
 
   // render the level
   r.x = 0, r.y = 0, r.w = window_width, r.h = game_height;
@@ -272,13 +314,24 @@ void loop()
   // render entities
   entity_render();
 
-  int w = level.layers[level.layer].width;
+  player_render();
+
+  float rcx = (cx / tile_width);
+  float rcy = (cy / tile_height);
+  r.x = ((floor(rcx) - rcx) * tile_width) - 1;
+  r.y = ((floor(rcy) - rcy) * tile_height) - 1;
+  r.w = ((window_width / tile_width) + 2) * tile_width;
+  r.h = ((game_height / tile_height) + 2) * tile_height;
+  SDL_RenderCopy(renderer, tex_fov, NULL, &r);
+
+  // debug dmap render
+  /*int w = level.layers[level.layer].width;
   int h = level.layers[level.layer].height;
   char *tiles = level.layers[level.layer].tiles;
   for (int y=0; y<h; y++) {
     for (int x=0; x<w; x++) {
       int index = (y*w)+x;
-      if (tiles[index] != 2 && tiles[index] != 3)
+      if (check_solid(tiles[index]))
         continue;
       int val = player->dmap[index];
       if (val > 50)
@@ -286,10 +339,31 @@ void loop()
       r.x = (x*16)-cx;
       r.y = (y*16)-cy;
       char buf[32];
-      // sprintf(buf, "%01i", val);
-      // text_render(buf, (x*16)-cx, (y*16)-cy);
+      sprintf(buf, "%01i", val);
+      text_render(buf, (x*tile_width)-cx, (y*tile_height)-cy);
     }
-  }
+  }*/
+
+  // draw player field of view
+  /*fromx = (cx / tile_width) - 1;
+  fromy = (cy / tile_height) - 1;
+  tox = fromx + (window_width / tile_width) + 2;
+  toy = fromy + (game_height / tile_height) + 2;
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  for (int y=fromy; y<toy; y++) {
+    for (int x=fromx; x<tox; x++) {
+      int val = light_map[(y*level_width)+x];
+      if (val == 255)
+        continue;
+      r.x = (x * tile_width) - cx;
+      r.y = (y * tile_height) - cy;
+      r.w = tile_width;
+      r.h = tile_height;
+
+      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255 - val);
+      SDL_RenderFillRect(renderer, &r);
+    }
+  }*/
 
   // render text box
   text_log_render();
@@ -312,12 +386,6 @@ void keypressed(int key)
 
 void mousepress(int key)
 {
-  int mx, my;
-  if (SDL_GetRelativeMouseMode())
-    SDL_GetRelativeMouseState(&mx, &my);
-  else
-    SDL_GetMouseState(&mx, &my);
-
   player_mousepress(key, mx, my);
 }
 

@@ -71,7 +71,15 @@ static void picktile(ivec2_t *t, int index, int w, int tw, int th) {
   t->y = (index / w) * th;
 }
 
-static void dijkstra(int *arr, char *tiles, int walkable[10], int x0, int y0, int x1, int y1, int w, int h) {
+static int is_wall(int walls[32], int tile) {
+  for (int i=0; i<32; i++)
+    if (tile == walls[i])
+      return 1;
+
+  return 0;
+}
+
+static void dijkstra(int *arr, char *tiles, int walls[32], int x0, int y0, int x1, int y1, int w, int h) {
   x0 = MAX(0, MIN(x0, w));
   x1 = MAX(0, MIN(x1, w));
   y0 = MAX(0, MIN(y0, h));
@@ -79,17 +87,6 @@ static void dijkstra(int *arr, char *tiles, int walkable[10], int x0, int y0, in
 
   if (x0 == x1 || y0 == y1)
     return;
-
-  int around[8][2] = {
-    {-1,-1},
-    {0, -1},
-    {1, -1},
-    {1,  0},
-    {1,  1},
-    {0,  1},
-    {-1, 1},
-    {-1, 0},
-  };
 
   int changed = 1;
   while (changed) {
@@ -100,15 +97,7 @@ static void dijkstra(int *arr, char *tiles, int walkable[10], int x0, int y0, in
         int tile = tiles[index];
 
         // make sure its a walkable tile
-        int found = 0;
-        for (int i=0; i<10; i++) {
-          if (tile == walkable[i]) {
-            found = 1;
-            break;
-          }
-        }
-
-        if (!found)
+        if (is_wall(walls, tile))
           continue;
 
         // find the lowest value surrounding tile
@@ -120,17 +109,12 @@ static void dijkstra(int *arr, char *tiles, int walkable[10], int x0, int y0, in
             continue;
 
           // make sure its walkable
-          found = 0;
-          for (int i=0; i<10; i++) {
-            if (tiles[(ty*w)+tx] == walkable[i]) {
-              found = 1;
-              break;
-            }
-          }
+          if (is_wall(walls, tiles[(ty*w)+tx]))
+            continue;
 
           // is it the lowest value tile?
           int value = arr[(ty*w)+tx];
-          if (found && value < lowest)
+          if (value < lowest)
             lowest = value;
         }
 
@@ -143,7 +127,7 @@ static void dijkstra(int *arr, char *tiles, int walkable[10], int x0, int y0, in
   }
 }
 
-static void line(int x0, int y0, int x1, int y1, int w, int h) {
+static int line(int x0, int y0, int x1, int y1, int w, int h, char *arr, int walls[32], ivec2_t positions[512]) {
   int dx = abs(x1-x0);
   int dy = abs(y1-y0);
 
@@ -152,12 +136,14 @@ static void line(int x0, int y0, int x1, int y1, int w, int h) {
 
   int err2, err = (dx > dy ? dx : -dy) / 2;
 
+  int pi = 0;
+
   for (;;) {
     if (x0 < 0 || y0 < 0 || x0 >= w || y0 >= h)
       break;
     int index = (y0*w)+x0;
-    // level.layers[level.layer].tiles[index] = 5;
-    if (x0 == x1 && y0 == y1)
+    positions[pi].x = x0, positions[pi++].y = y0;
+    if ((x0 == x1 && y0 == y1) || is_wall(walls, arr[index]))
       break;
     err2 = err;
     if (err2 > -dx) {
@@ -169,6 +155,8 @@ static void line(int x0, int y0, int x1, int y1, int w, int h) {
       y0 += sy;
     }
   }
+
+  return pi;
 }
 
 #endif // MATH_H
