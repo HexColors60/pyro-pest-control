@@ -10,6 +10,7 @@
 #include "generator.h"
 #include "entity.h"
 #include "player.h"
+#include "spell.h"
 
 // sdl vars
 SDL_Window *window;
@@ -63,7 +64,7 @@ void loop()
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
     // nearest filtering
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
     // dt stuff
     last_frame_time = SDL_GetPerformanceCounter();
@@ -83,6 +84,7 @@ void loop()
       level_textures.chunks[i].tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, CHUNK_WIDTH, CHUNK_HEIGHT);
       level_textures.chunks[i].update     = 1;
       level_textures.chunks[i].tile_count = 0;
+      level_textures.chunks[i].count      = 0;
     }
 
     // generate the first 3 layers
@@ -98,11 +100,10 @@ void loop()
     entity_init();
 
     // init player
-    player_init();
-    player->pos.x = level.layers[level.layer].sx;
-    player->pos.y = level.layers[level.layer].sy;
-    player->to.x  = level.layers[level.layer].sx;
-    player->to.y  = level.layers[level.layer].sy;
+    player_init(level.layers[level.layer].sx, level.layers[level.layer].sy);
+
+    // init spell system
+    spell_init();
 
     // setup vga atlas etc
     text_init();
@@ -150,7 +151,6 @@ void loop()
 
       // window events
       case SDL_WINDOWEVENT: {
-        // ex_window_event(&event);
         break;
       }
     }
@@ -169,10 +169,15 @@ void loop()
 
   // repeat until all are done updating
   if (update && tick > 1.0f / 16.0f) {
-    update = entity_update();
-    tick = 0.0f;
+    if (!spell_ready()) {
+      update = player_update();
+      entity_update();
+      spell_update();
+      tick = 0.0f;
+    }
   }
   entity_update_render();
+  spell_update_render();
   /*----------------------------------------*/
 
 
@@ -187,12 +192,20 @@ void loop()
       if (!level_textures.chunks[index].update)
         continue;
 
-      level_textures.chunks[index].update     = 0;
-      level_textures.chunks[index].tile_count = 0;
+      // num of tiles that need updating
+      int *updated = level_textures.chunks[index].updated;
+      int count    = level_textures.chunks[index].count;
+
+      level_textures.chunks[index].update = 0;
+
+      if (!count)
+        level_textures.chunks[index].tile_count = 0;
 
       SDL_SetRenderTarget(renderer, level_textures.chunks[index].tex);
       SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-      SDL_RenderClear(renderer);
+
+      if (!init)
+        SDL_RenderClear(renderer);
 
       SDL_Rect ra, rb;
       int w  = level_width;
@@ -205,12 +218,28 @@ void loop()
       for (int y=fromy; y<toy; y++) {
         for (int x=fromx; x<tox; x++) {
           // current tile
+          int tindex = (y*w)+x;
           int tile = 0;
           if (x >= 0 && x < w && y >= 0 && y < h)
-            tile = level.layers[level.layer].tiles[(y*w)+x];
+            tile = level.layers[level.layer].tiles[tindex];
 
           if (!tile)
             continue;
+
+          // check if anything needs updating
+          if (count) {
+            int found = 0;
+            for (int i=0; i<count; i++) {
+              if (tindex == updated[i]) {
+                found = 1;
+                break;
+              }
+            }
+
+            // no need to update it
+            if (!found)
+              continue;
+          }
 
           // position of tile in texture
           ra.x = (tile - ((tile / tw) * tw)) * rtile_width;
@@ -225,9 +254,13 @@ void loop()
           rb.h = tile_height;
 
           SDL_RenderCopy(renderer, tex_tiles, &ra, &rb);
-          level_textures.chunks[index].tile_count++;
+
+          if (!count)
+            level_textures.chunks[index].tile_count++;
         }
       }
+
+      level_textures.chunks[index].count = 0;
     }
   }
   /*----------------------------------------*/
@@ -275,24 +308,20 @@ void loop()
   /-----------------------------------------*/
   SDL_SetRenderTarget(renderer, tex_fov);
 
-  SDL_Rect src;
-  src.x = cx; src.y = cy;
-  src.w = (window_width / tile_width);
-  src.h = (game_height / tile_height);
-
   uint8_t *pixels = NULL;
   int pitch = 0;
   SDL_LockTexture(tex_fov, NULL, (void**)&pixels, &pitch);
 
   fromx = floor(cx / tile_width);
   fromy = floor(cy / tile_height);
-  tox = fromx + (window_width / tile_width);
-  toy = fromy + (game_height / tile_height);
-  int count = ((window_width / tile_width) + 2) * 4;
+  tox = MAX(0, MIN(fromx + (window_width / tile_width), level_width));
+  toy = MAX(0, MIN(fromy + (game_height / tile_height) + 2, level_height));
+  int count = (MIN((window_width / tile_width) + 2, level_width-fromx)) * 4;
   for (int y=fromy; y<toy; y++) {
-    if (y > level_height)
-      break;
-    memcpy(&pixels[(y-fromy)*pitch], &light_map[((y*level_width)+fromx)*4], count);
+    if (y < 0 || y > level_height)
+      continue;
+    int index = ((y*level_width)+fromx)*4;
+    memcpy(&pixels[(y-fromy)*pitch], &light_map[index], count);
   }
 
   SDL_UnlockTexture(tex_fov);
@@ -316,6 +345,8 @@ void loop()
 
   player_render();
 
+  spell_render();
+
   float rcx = (cx / tile_width);
   float rcy = (cy / tile_height);
   r.x = ((floor(rcx) - rcx) * tile_width) - 1;
@@ -323,47 +354,6 @@ void loop()
   r.w = ((window_width / tile_width) + 2) * tile_width;
   r.h = ((game_height / tile_height) + 2) * tile_height;
   SDL_RenderCopy(renderer, tex_fov, NULL, &r);
-
-  // debug dmap render
-  /*int w = level.layers[level.layer].width;
-  int h = level.layers[level.layer].height;
-  char *tiles = level.layers[level.layer].tiles;
-  for (int y=0; y<h; y++) {
-    for (int x=0; x<w; x++) {
-      int index = (y*w)+x;
-      if (check_solid(tiles[index]))
-        continue;
-      int val = player->dmap[index];
-      if (val > 50)
-        continue;
-      r.x = (x*16)-cx;
-      r.y = (y*16)-cy;
-      char buf[32];
-      sprintf(buf, "%01i", val);
-      text_render(buf, (x*tile_width)-cx, (y*tile_height)-cy);
-    }
-  }*/
-
-  // draw player field of view
-  /*fromx = (cx / tile_width) - 1;
-  fromy = (cy / tile_height) - 1;
-  tox = fromx + (window_width / tile_width) + 2;
-  toy = fromy + (game_height / tile_height) + 2;
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  for (int y=fromy; y<toy; y++) {
-    for (int x=fromx; x<tox; x++) {
-      int val = light_map[(y*level_width)+x];
-      if (val == 255)
-        continue;
-      r.x = (x * tile_width) - cx;
-      r.y = (y * tile_height) - cy;
-      r.w = tile_width;
-      r.h = tile_height;
-
-      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255 - val);
-      SDL_RenderFillRect(renderer, &r);
-    }
-  }*/
 
   // render text box
   text_log_render();

@@ -18,7 +18,9 @@ typedef struct {
 
 void entity_init();
 
-int entity_update();
+void entity_update();
+
+int entity_ready();
 
 void entity_update_render();
 

@@ -41,9 +41,8 @@ void entity_set_tile(entity_t *e, int i, size_t index)
   memcpy(&e->tiles[i], &t, sizeof(ivec2_t));
 }
 
-int entity_update()
+void entity_update()
 {
-  int updated = 0;
   entity_t *e;
   for (int i=0; i<ENTITY_MAX; i++) {
     e = &entity_list[i];
@@ -100,14 +99,27 @@ int entity_update()
       }
     }
   }
+}
 
-  // return updated;
-  return 1;
+int entity_ready()
+{
+  int update = 0;
+  entity_t *e;
+  for (int i=0; i<ENTITY_MAX; i++) {
+    e = &entity_list[i];
+
+    if (!e->alive)
+      continue;
+
+    if (e->pos.x != e->to.x && e->pos.y != e->to.y)
+      update = 1;
+  }
+
+  return update;
 }
 
 void entity_update_render()
 {
-  int updated = 0;
   entity_t *e;
   for (int i=0; i<ENTITY_MAX; i++) {
     e = &entity_list[i];
@@ -124,6 +136,7 @@ void entity_update_render()
     if (fabs(e->pos.y - e->to.y) <= 0.01f)
       e->pos.y = e->to.y;
   }
+
 }
 
 void entity_render()
@@ -153,7 +166,7 @@ void entity_render()
 
     // render a reflection
     if (check_tile(e->to.x, e->to.y) == TILE_STONE_FLOOR && check_tile(e->to.x, e->to.y+1) == TILE_STONE_FLOOR) {
-      SDL_SetTextureAlphaMod(tex_tiles, 50);
+      SDL_SetTextureAlphaMod(tex_tiles, 80);
       rb.y += (tile_height);
       SDL_RenderCopyEx(renderer, tex_tiles, &ra, &rb, 0, NULL, SDL_FLIP_VERTICAL);
     }

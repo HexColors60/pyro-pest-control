@@ -10,11 +10,11 @@ uint8_t *light_map;
 
 char inventory[4] = {0};
 
-int aiming = 0;
+int aiming = 0, flame = 1;
+int active_spell = SPELL_FIREBOLT;
+ivec2_t fire_to;
 
-void player_update();
-
-void player_init()
+void player_init(int x, int y)
 {
   // discard if already initialized
   if (!player)
@@ -22,13 +22,17 @@ void player_init()
 
   // initialize an entity for the player
   player = entity_new();
-  player->update = player_update;
-  player->alive      = 1;
-  player->pos.x      = 0;
-  player->pos.y      = 0;
-  player->to.x       = 0;
-  player->to.y       = 0;
-  player->speed      = 1;
+  player->update = NULL;
+  player->alive  = 1;
+  player->pos.x  = 0;
+  player->pos.y  = 0;
+  player->to.x   = 0;
+  player->to.y   = 0;
+  player->speed  = 1;
+  player->pos.x  = x;
+  player->pos.y  = y;
+  player->to.x   = x;
+  player->to.y   = y;
 
   // tile 16
   entity_set_tile(player, 0, TILEI_PLAYER);
@@ -45,7 +49,7 @@ void player_init()
   player_update(player);
 }
 
-void player_update(entity_t *e)
+void player_light()
 {
   /*-----------------------------------------/
   /---------------- FOV ---------------------/
@@ -66,27 +70,74 @@ void player_update(entity_t *e)
       walls[i] = solid[i];
   walls[SOLID_COUNT] = TILE_DOOR_CLOSED;
 
+  int distance = flame ? 18 : 48;
+
   for (int i=0; i<360; i++) {
     float fromx = player->to.x;
     float fromy = player->to.y;
 
-    float angle = (float)i * 180.0f / M_PI;
-    float tox = fromx + 999.0f * cos(angle);
-    float toy = fromy + 999.0f * sin(angle);
+    float tox = fromx + 0.5f + ((float)distance * sintable[i]);
+    float toy = fromy + 0.5f + ((float)distance * costable[i]);
 
     int count = line(fromx, fromy, tox, toy, level_width, level_height, tiles, walls, positions);
 
     for (int j=0; j<count; j++) {
+      // get position and light value
       int x = MAX(0, MIN(positions[j].x, level_width));
       int y = MAX(0, MIN(positions[j].y, level_height));
+      int val = 255 - MAX(0, 255 - MIN((j * distance), 255));
+
+      // set pixeldata
       int index = ((y*level_width)+x)*4;
-      light_map[index+0] = 0;
-      light_map[index+1] = 0;
-      light_map[index+2] = 0;
-      light_map[index+3] = 255 - MAX(0, 255 - MIN((j * 24), 255));
+      if (light_map[index+3] > val) {
+        light_map[index+0] = 0;
+        light_map[index+1] = 0;
+        light_map[index+2] = 0;
+        light_map[index+3] = val;
+      }
+
+      int tile = check_tile(x, y);
+      if (tile == TILE_STONE_HWALL || tile == TILE_STONE_VWALL || tile == TILE_DOOR_CLOSED || tile == TILE_DOOR_OPEN)
+        continue;
+
+      // light dark walls that are next to lit floor
+      for (int k=0; k<8; k++) {
+        int cx = MAX(0, MIN(x + around[k][0], level_width));
+        int cy = MAX(0, MIN(y + around[k][1], level_height));
+        if (cx == x && cy == y)
+          continue;
+
+        int tile = check_tile(cx, cy);
+        int index = ((cy*level_width)+cx)*4;
+        if (light_map[index+3] > val) {
+          light_map[index+0] = 0;
+          light_map[index+1] = 0;
+          light_map[index+2] = 0;
+          light_map[index+3] = val;
+        }
+      }
     }
   }
   /*----------------------------------------*/
+}
+
+void player_fire()
+{
+  aiming = 0;
+
+  spell_new(active_spell, player->to.x, player->to.y, fire_to.x, fire_to.y);
+}
+
+int player_update()
+{
+  int update = 0;
+
+  if (player->walking)
+    update = 1;
+
+  player_light();
+
+  return update;
 }
 
 void player_render()
@@ -122,10 +173,15 @@ void player_render()
   rb.w = tile_width;
   rb.h = tile_height;
   for (int j=1; j<count; j++) {
+    int tile = check_tile(positions[j].x, positions[j].y);
+    if (j > spell_get_range(active_spell) || (tile == TILE_STONE_HWALL || tile == TILE_STONE_VWALL || tile == TILE_DOOR_CLOSED))
+      break;
     rb.x = MAX(0, MIN(positions[j].x, level_width)) * tile_width;
     rb.y = MAX(0, MIN(positions[j].y, level_height)) * tile_height;
     rb.x -= cx;
     rb.y -= cy;
+    fire_to.x = positions[j].x;
+    fire_to.y = positions[j].y;
     SDL_RenderCopy(renderer, tex_tiles, &ra, &rb);
   }
   /*----------------------------------------*/
@@ -139,11 +195,15 @@ void player_keypress(int key)
   }
 
   aiming = !aiming;
-  // spell_new(SPELL_FIREBOLT, player->to.x, player->to.y, player->to.x+spell_range[SPELL_FIREBOLT], player->to.y);
 }
 
 void player_mousepress(int button, int mx, int my)
 {
+  if (aiming) {
+    player_fire();
+    return;
+  }
+
   /*-----------------------------------------/
   /---------------- mouse dmap --------------/
   /-----------------------------------------*/

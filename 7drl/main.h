@@ -12,7 +12,7 @@ extern SDL_Window *window;
 extern SDL_Renderer *renderer;
 static const int window_width  = 840; // 960
 static const int window_height = 600; // 769
-static const int game_height   = 648; // 648
+static const int game_height   = 600; // 648
 static const int tile_width    = 16;
 static const int tile_height   = 24;
 static const int rtile_width   = 16;
@@ -51,6 +51,7 @@ typedef struct {
 typedef struct {
   SDL_Texture *tex;
   int update, tile_count;
+  int updated[64], count;
 } level_chunk_t;
 
 typedef struct {
@@ -65,11 +66,14 @@ static void update_chunk(int x, int y, int tile)
 {
   int tx = x / tile_width;
   int ty = y / tile_height;
-  level.layers[level.layer].tiles[(ty*level_width)+tx] = tile;
+  int index = (ty*level_width)+tx;
+  level.layers[level.layer].tiles[index] = tile;
 
   int cx = floor(x / CHUNK_WIDTH);
   int cy = floor(y / CHUNK_HEIGHT);
-  level_textures.chunks[(cy*CHUNK_STRIDE)+cx].update = 1;
+  level_chunk_t *chunk = &level_textures.chunks[(cy*CHUNK_STRIDE)+cx];
+  chunk->update = 1;
+  chunk->updated[chunk->count++] = index;
 }
 
 static int check_tile(int x, int y)

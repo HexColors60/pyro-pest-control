@@ -5,22 +5,34 @@
 
 enum {
   SPELL_FIREBOLT,
-
   SPELL_NUM
 };
 
-typedef struct {
-  fvec2_t pos, to;
-  ivec2_t tile;
+enum {
+  TILE_SPELL_FIREBOLT = 32
+};
 
-  int range, firechance;
-  int alive;
+typedef struct {
+  fvec2_t pos, to, from;
+  ivec2_t tile;
+  float t;
+
+  int range, firechance, speed;
+  int alive, spell;
   int *dmap;
 } spell_t;
+
+int spell_get_range(int s);
+
+void spell_init();
 
 void spell_new(int s, int x0, int y0, int x1, int y1);
 
 void spell_update();
+
+int spell_ready();
+
+void spell_hit(spell_t *spell);
 
 void spell_update_render();
 

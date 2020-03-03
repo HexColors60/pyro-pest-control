@@ -8,9 +8,13 @@ extern entity_t *player;
 extern int light_map_width, light_map_height;
 extern uint8_t *light_map;
 
-void player_init();
+void player_init(int x, int y);
 
-void player_update(entity_t *e);
+void player_light();
+
+void player_fire();
+
+int player_update();
 
 void player_render();
 
