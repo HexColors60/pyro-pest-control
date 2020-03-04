@@ -99,6 +99,7 @@ void text_log_add(const char *str)
 
   // render log lines
   int ypos = 7;
+  int alpha = 255;
   for (int y=0; y<LOG_MAX; y++) {
     int i = text_logi-y-1;
     if (i < 0)
@@ -108,6 +109,7 @@ void text_log_add(const char *str)
     if (str[0] == '\0')
       continue;
 
+    SDL_SetTextureAlphaMod(tex_font, 255 - ((float)ypos / 128.0f) * 255);
     text_render(str, 12, (TEXT_AREA_HEIGHT - VGA_FONT_HEIGHT) - ypos);
     ypos += VGA_FONT_HEIGHT;
   }
@@ -115,14 +117,9 @@ void text_log_add(const char *str)
 
 void text_log_render()
 {
-  // render ui bg
   SDL_Rect r;
-  r.x = 0, r.y = game_height;
-  r.w = window_width;
-  r.h = window_height - game_height;
-  SDL_RenderCopy(renderer, tex_ui, NULL, &r);
-
-  r.w = TEXT_AREA_WIDTH;
+  r.x = 0, r.y = game_height-128;
+  r.h = 128, r.w = TEXT_AREA_WIDTH;
   SDL_RenderCopy(renderer, tex_text, NULL, &r);
 }
 

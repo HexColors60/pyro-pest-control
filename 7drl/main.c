@@ -11,6 +11,7 @@
 #include "entity.h"
 #include "player.h"
 #include "spell.h"
+#include "enemy.h"
 
 // sdl vars
 SDL_Window *window;
@@ -58,7 +59,7 @@ void loop()
     }
 
     // init window
-    window = SDL_CreateWindow("rl", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_width, window_height, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("rl", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_width, window_height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
     // init renderer
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -101,6 +102,23 @@ void loop()
 
     // init player
     player_init(level.layers[level.layer].sx, level.layers[level.layer].sy);
+
+    int i = 150;
+    for (int y=0; y<level_height; y++) {
+      for (int x=0; x<level_height; x++) {
+        if (!i)
+          break;
+
+        if (roll(200) > 5)
+          continue;
+
+        if (level.layers[level.layer].tiles[(y*level_width)+x] == TILE_WOOD_FLOOR) {
+
+          enemy_new(ENEMY_TYPE_SKELETON + (rand() % 5), x, y);
+          i--;
+        }
+      }
+    }
 
     // init spell system
     spell_init();
@@ -169,7 +187,7 @@ void loop()
 
   // repeat until all are done updating
   if (update && tick > 1.0f / 16.0f) {
-    if (!spell_ready()) {
+    if (spell_ready()) {
       update = player_update();
       entity_update();
       spell_update();
@@ -316,7 +334,7 @@ void loop()
   fromy = floor(cy / tile_height);
   tox = MAX(0, MIN(fromx + (window_width / tile_width), level_width));
   toy = MAX(0, MIN(fromy + (game_height / tile_height) + 2, level_height));
-  int count = (MIN((window_width / tile_width) + 2, level_width-fromx)) * 4;
+  int count = ((window_width / tile_width) + 2) * 4;
   for (int y=fromy; y<toy; y++) {
     if (y < 0 || y > level_height)
       continue;
@@ -364,13 +382,6 @@ void loop()
 
 void keypressed(int key)
 {
-  char buff[512];
-  int l = 1+rand() % 61;
-  for (int i=0; i<=l; i++)
-    buff[i] = '0' + roll(42);
-  buff[l] = '\0';
-  text_log_add(buff);
-
   player_keypress(key);
 }
 

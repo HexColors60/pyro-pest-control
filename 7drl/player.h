@@ -7,6 +7,7 @@
 extern entity_t *player;
 extern int light_map_width, light_map_height;
 extern uint8_t *light_map;
+extern int *dmap_to_player, *dmap_from_player, *dmap_to_mouse;
 
 void player_init(int x, int y);
 

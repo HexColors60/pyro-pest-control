@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef struct {
   int x, y;
@@ -119,15 +120,16 @@ static void dijkstra(int *arr, char *tiles, int walls[32], int x0, int y0, int x
         for (int i=0; i<8; i++) {
           int tx = MAX(0, MIN(x + around[i][0], w));
           int ty = MAX(0, MIN(y + around[i][1], h));
+          int ti = (ty*w)+tx;
           if (tx == x && ty == y)
             continue;
 
           // make sure its walkable
-          if (is_wall(walls, tiles[(ty*w)+tx]))
+          if (is_wall(walls, tiles[ti]))
             continue;
 
           // is it the lowest value tile?
-          int value = arr[(ty*w)+tx];
+          int value = arr[ti];
           if (value < lowest)
             lowest = value;
         }

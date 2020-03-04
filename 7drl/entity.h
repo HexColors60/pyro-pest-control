@@ -7,16 +7,19 @@ typedef struct {
   fvec2_t pos, to;
   ivec2_t tiles[2];
   int alive, animated, frame;
+  int updating, hp, resist;
 
-  int walking, speed;
+  int walking, speed, type;
   int *dmap;
 
-  void (*onhit)(void *e);
+  void (*onhit)(void *e, int damage);
   void (*update)(void *e);
   void (*ondeath)(void *e);
 } entity_t;
 
 void entity_init();
+
+void entity_hit(int x, int y, int damage);
 
 void entity_update();
 

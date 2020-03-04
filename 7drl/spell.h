@@ -9,15 +9,17 @@ enum {
 };
 
 enum {
-  TILE_SPELL_FIREBOLT = 32
+  TILE_SPELL_FIREBOLT = 32,
+  TILE_SPELL_FIRE = 33
 };
 
 typedef struct {
   fvec2_t pos, to, from;
   ivec2_t tile;
-  float t;
+  float t, step;
 
   int range, firechance, speed;
+  int damage, update;
   int alive, spell;
   int *dmap;
 } spell_t;
