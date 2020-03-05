@@ -23,9 +23,11 @@ void player_init(int x, int y)
 
   // initialize an entity for the player
   player = entity_new();
+  player->onhit  = player_hit;
   player->update = NULL;
   player->alive  = 1;
   player->hp     = 10;
+  player->hp_max = player->hp;
   player->speed  = 2;
   player->pos.x  = x;
   player->pos.y  = y;
@@ -44,12 +46,31 @@ void player_init(int x, int y)
   if (dmap_to_player)
     free(dmap_to_player);
   dmap_to_player = malloc(sizeof(int) * level_width * level_height);
+  if (dmap_from_player)
+    free(dmap_from_player);
+  dmap_from_player = malloc(sizeof(int) * level_width * level_height);
 
   if (light_map)
     free(light_map);
   light_map = malloc(level_width * level_height * 4);
 
   player_update(player);
+  player_light();
+}
+
+void player_hit(entity_t *e, int damage, int type)
+{
+  if (damage > 0) {
+    char buff[512];
+    sprintf(buff, "You take %i damage", damage);
+    text_log_add(buff);
+  }
+
+  if (type == SPELL_WEB) {
+    text_log_add("You get caught in a spider web");
+    text_log_add("You cannot move");
+    player->stuck = 1 + roll(3);
+  }
 }
 
 void player_light()
@@ -71,7 +92,7 @@ void player_light()
   int walls[32] = {-1};
     for (int i=0; i<SOLID_COUNT; i++)
       walls[i] = solid[i];
-  walls[SOLID_COUNT] = TILE_DOOR_CLOSED;
+  walls[SOLID_COUNT-1] = TILE_DOOR_CLOSED;
 
   int distance = flame ? 18 : 48;
 
@@ -137,6 +158,11 @@ int player_update()
 {
   int update = 0;
 
+  if (!player->alive) {
+    player->hp = 0;
+    return 1;
+  }
+
   if (player->walking)
     update = 1;
 
@@ -159,13 +185,39 @@ int player_update()
   int toy   = player->to.y + h;
   dijkstra(dmap_to_player, tiles, walls, fromx, fromy, tox, toy, level_width, level_height);
 
-  // player_light();
+  // calculate fleeing dmap map
+  for (int i=0; i<level_width*level_height; i++) {
+    if (dmap_to_player[i] == DIJ_MAX)
+      dmap_from_player[i] = -DIJ_MAX;
+    else
+      dmap_from_player[i] = -(dmap_to_player[i] * 1.2f);
+  }
+
+  // recalculate it
+  dijkstra(dmap_from_player, tiles, walls, fromx, fromy, tox, toy, level_width, level_height);
 
   return update;
 }
 
 void player_render()
 {
+  SDL_Rect ra, rb;
+  if (player->stuck) {
+    ivec2_t t;
+    int tw = tiles_tex_width  / rtile_width;
+    picktile(&t, TILE_SPELL_WEB, tw, rtile_width, rtile_height);
+
+    ra.x = t.x;
+    ra.y = t.y;
+    ra.w = tile_width;
+    ra.h = tile_height;
+    rb.w = tile_width;
+    rb.h = tile_height;
+    rb.x = (player->pos.x*tile_width)-cx;
+    rb.y = (player->pos.y*tile_height)-cy;
+    SDL_RenderCopy(renderer, tex_tiles, &ra, &rb);
+  }
+
   /*-----------------------------------------/
   /---------------- AIMING ------------------/
   /-----------------------------------------*/
@@ -176,7 +228,7 @@ void player_render()
   int walls[32] = {-1};
     for (int i=0; i<SOLID_COUNT; i++)
       walls[i] = solid[i];
-  walls[SOLID_COUNT] = TILE_DOOR_CLOSED;
+  walls[SOLID_COUNT-1] = TILE_DOOR_CLOSED;
 
   // raycast
   char *tiles = level.layers[level.layer].tiles;
@@ -189,7 +241,6 @@ void player_render()
 
   int count = line(player->to.x, player->to.y, tmx, tmy, level_width, level_height, tiles, walls, positions);
 
-  SDL_Rect ra, rb;
   ra.x = 0;
   ra.y = 0;
   ra.w = rtile_width;

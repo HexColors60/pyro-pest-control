@@ -3,6 +3,8 @@
 #include "math.h"
 #include "texture.h"
 #include "vga.h"
+#include "entity.h"
+#include "spell.h"
 
 #include <inttypes.h>
 
@@ -13,7 +15,7 @@ SDL_Texture *tex_font, *tex_ui, *tex_text;
 #define TEXT_AREA_HEIGHT 128
 
 char text_log[LOG_MAX][512];
-int text_logi = 0;
+int text_logi = 0, text_update = 0;
 
 void text_init()
 {
@@ -93,30 +95,37 @@ void text_log_add(const char *str)
   if (text_logi >= LOG_MAX)
     text_logi = 0;
 
-  SDL_SetRenderTarget(renderer, tex_text);
-  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-  SDL_RenderClear(renderer);
-
-  // render log lines
-  int ypos = 7;
-  int alpha = 255;
-  for (int y=0; y<LOG_MAX; y++) {
-    int i = text_logi-y-1;
-    if (i < 0)
-      i += 7;
-
-    char *str = &text_log[i][0];
-    if (str[0] == '\0')
-      continue;
-
-    SDL_SetTextureAlphaMod(tex_font, 255 - ((float)ypos / 128.0f) * 255);
-    text_render(str, 12, (TEXT_AREA_HEIGHT - VGA_FONT_HEIGHT) - ypos);
-    ypos += VGA_FONT_HEIGHT;
-  }
+  text_update = 1;
 }
 
 void text_log_render()
 {
+  if (text_update && entity_ready() && spell_ready()) {
+    SDL_SetRenderTarget(renderer, tex_text);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    SDL_SetTextureColorMod(tex_font, 255, 255, 255);
+
+    // render log lines
+    int ypos = 7;
+    int alpha = 255;
+    for (int y=0; y<LOG_MAX; y++) {
+      int i = text_logi-y-1;
+      if (i < 0)
+        i += 7;
+
+      char *str = &text_log[i][0];
+      if (str[0] == '\0')
+        continue;
+
+      SDL_SetTextureAlphaMod(tex_font, 255 - ((float)ypos / 128.0f) * 255);
+      text_render(str, 12, (TEXT_AREA_HEIGHT - VGA_FONT_HEIGHT) - ypos);
+      ypos += VGA_FONT_HEIGHT;
+    }
+
+    text_update = 0;
+  }
+
   SDL_Rect r;
   r.x = 0, r.y = game_height-128;
   r.h = 128, r.w = TEXT_AREA_WIDTH;
@@ -125,8 +134,6 @@ void text_log_render()
 
 void text_render(const char *str, int x, int y)
 {
-  SDL_SetTextureColorMod(tex_font, 255, 255, 255);
-
   SDL_Rect ra,rb;
   rb.x = x;
   rb.y = y;

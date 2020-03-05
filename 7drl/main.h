@@ -67,6 +67,8 @@ static void update_chunk(int x, int y, int tile)
   int tx = x / tile_width;
   int ty = y / tile_height;
   int index = (ty*level_width)+tx;
+  if (level.layers[level.layer].tiles[index] == tile)
+    return;
   level.layers[level.layer].tiles[index] = tile;
 
   int cx = floor(x / CHUNK_WIDTH);

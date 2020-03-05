@@ -7,7 +7,7 @@
 
 #define SPELL_MAX 512
 
-uint8_t *fire_map;
+uint8_t *fire_map, *fire_map_copy;
 
 spell_t *spell_list;
 ivec2_t fire_tile;
@@ -23,8 +23,10 @@ void spell_init()
     spell->alive = 0;
   }
 
-  fire_map = malloc(level_width * level_height * 4);
-  memset(fire_map, 0, level_width * level_height * 4);
+  fire_map = malloc(level_width * level_height);
+  fire_map_copy = malloc(level_width * level_height);
+  memset(fire_map, 0, level_width * level_height);
+  memset(fire_map_copy, 0, level_width * level_height);
 
   ivec2_t t;
   int tw = tiles_tex_width  / rtile_width;
@@ -37,6 +39,14 @@ int spell_get_range(int s)
   switch (s) {
     case SPELL_FIREBOLT: {
       return 10;
+      break;
+    }
+    case SPELL_WEB: {
+      return 10;
+      break;
+    }
+    case SPELL_SPIRIT: {
+      return 50;
       break;
     }
   }
@@ -63,14 +73,33 @@ void spell_new(int s, int x0, int y0, int x1, int y1)
   // set spell specific stats
   spell->spell = s;
   spell->alive = 1;
+  spell->lit   = 1;
   int tile = 0;
   switch (s) {
     case SPELL_FIREBOLT: {
       spell->range      = spell_get_range(s);
-      spell->firechance = 10;
+      spell->firechance = 1;
       spell->speed      = 20;
       spell->damage     = 3;
       tile = TILE_SPELL_FIREBOLT;
+      break;
+    }
+    case SPELL_WEB: {
+      spell->range      = spell_get_range(s);
+      spell->firechance = 0;
+      spell->speed      = 30;
+      spell->damage     = 0;
+      spell->lit        = 0;
+      tile = TILE_SPELL_WEB;
+      break;
+    }
+    case SPELL_SPIRIT: {
+      spell->range      = spell_get_range(s);
+      spell->firechance = 0;
+      spell->speed      = 10;
+      spell->damage     = 3;
+      spell->lit        = 1;
+      tile = TILE_SPELL_SPIRIT;
       break;
     }
   }
@@ -104,11 +133,49 @@ void spell_update()
       spell->update = 1;
   }
 
-  for (int i=0; i<level_width*level_height; i++) {
-    if (!fire_map[i])
-      continue;
+  memcpy(fire_map_copy, fire_map, level_width * level_height);
+  for (int y=0; y<level_height; y++) {
+    for (int x=0; x<level_width; x++) {
+      int index = (y*level_width)+x;
 
-    fire_map[i]--;
+      if (!fire_map_copy[index])
+        continue;
+
+      // fire spread
+      for (int i=0; i<4; i++) {
+        int tx = MAX(0, MIN(x + adjacent[i][0], level_width));
+        int ty = MAX(0, MIN(y + adjacent[i][1], level_height));
+        if (tx == x && ty == y)
+          continue;
+
+        int index2 = (ty*level_width)+tx;
+        if (fire_map[index2])
+          continue;
+
+        if (roll(10) == 1)
+          continue;
+
+        int t = check_tile(tx, ty);
+        int spread = fire_map[index] / 2;
+        if (t == TILE_WOOD_FLOOR || t == TILE_DOOR_OPEN) {
+          if (roll(10) > 1)
+            fire_map[index2] = MAX(0, fire_map_copy[index] - 3);
+          else
+            fire_map[index2] = fire_map_copy[index];
+        } else if (t == TILE_STONE_FLOOR) {
+          fire_map[index2] = MAX(0, fire_map_copy[index] - 4);
+        }
+      }
+
+      entity_hit(x, y, FIRE_DAMAGE, -1);
+      fire_map[index]--;
+
+      // break floor
+      int t = check_tile(x, y);
+      if (!fire_map[index] && roll(FIRE_BREAK_CHANCE) == 1 && t == TILE_WOOD_FLOOR) {
+        update_chunk(x * tile_width, y * tile_height, TILE_WOOD_HOLE);
+      }
+    }
   }
 }
 
@@ -137,8 +204,13 @@ void spell_hit(spell_t *spell)
   int tx = floor(spell->to.x);
   int ty = floor(spell->to.y);
   int tindex = (ty*level_width)+tx;
-  if (roll(spell->firechance) == 1)
-    fire_map[tindex] = 5;
+  if (spell->firechance && roll(spell->firechance) == 1) {
+    int tile = check_tile(tx, ty);
+    if (tile == TILE_WOOD_FLOOR)
+      fire_map[tindex] = 8 + roll(6);
+    else
+      fire_map[tindex] = 5 + roll(3);
+  }
 
   switch (spell->spell) {
     case SPELL_FIREBOLT: {
@@ -147,7 +219,7 @@ void spell_hit(spell_t *spell)
     }
   }
 
-  entity_hit(tx, ty, spell->damage);
+  entity_hit(tx, ty, spell->damage, spell->spell);
 
   spell->alive = 0;
 }
@@ -165,6 +237,45 @@ void spell_update_render()
   walls[SOLID_COUNT] = TILE_DOOR_CLOSED;
 
   char *tiles = level.layers[level.layer].tiles;
+
+  // update lighting based on fire map
+  int fx = MAX(0, floor(cx / tile_width) - 5);
+  int fy = MAX(0, floor(cy / tile_height) - 5);
+  int tx = MAX(0, MIN(fx + (window_width / tile_width) + 5, level_width));
+  int ty = MAX(0, MIN(fy + (game_height / tile_height) + 5, level_height));
+  for (int y=fy; y<ty; y++) {
+    for (int x=fx; x<tx; x++) {
+      int index = (y*level_width)+x;
+      if (!fire_map[index])
+        continue;
+
+      // handle lighting
+      float r = 2.5f;
+      for (int j=0; j<360; j++) {
+        float fromx = x + 0.5f;
+        float fromy = y + 0.5f;
+        float tox = fromx + (r * sintable[j]);
+        float toy = fromy + (r * costable[j]);
+
+        int count = line(fromx, fromy, tox, toy, level_width, level_height, tiles, walls, positions);
+
+        for (int k=0; k<count; k++) {
+          if (check_tile(positions[k].x, positions[k].y) == TILE_NONE)
+            continue;
+          float val = MIN((k / r), 1.0f);
+          if (roll(2) == 1)
+            val = MIN(val + 0.3f, 1.0f);
+          int vala  = 100 * val;
+          int valb  = 50 * val;
+          int tindex = ((positions[k].y*level_width)+positions[k].x)*4;
+          light_map[tindex+0] = 200 - vala;
+          light_map[tindex+1] = 150 - vala;
+          light_map[tindex+2] = 0;
+          light_map[tindex+3] = 80 - valb;
+        }
+      }
+    }
+  }
 
   spell_t *spell;
   for (int i=0; i<SPELL_MAX; i++) {
@@ -185,6 +296,9 @@ void spell_update_render()
       spell_hit(spell);
       continue;
     }
+
+    if (!spell->lit)
+      continue;
 
     // handle lighting
     float r = 5.5f - 4.0f * (spell->step);
@@ -212,45 +326,6 @@ void spell_update_render()
       }
     }
   }
-
-  // update lighting based on fire map
-  /*int fx = MAX(0, floor(cx / tile_width) - 5);
-  int fy = MAX(0, floor(cy / tile_height) - 5);
-  int tx = MAX(0, MIN(fx + (window_width / tile_width) + 5, level_width));
-  int ty = MAX(0, MIN(fy + (game_height / tile_height) + 5, level_height));
-  for (int y=fy; y<ty; y++) {
-    for (int x=fx; x<tx; x++) {
-      int index = (y*level_width)+x;
-      if (!fire_map[index])
-        continue;
-
-      // handle lighting
-      float r = 2.5f;
-      for (int j=0; j<360; j++) {
-        float fromx = x + 0.5f;
-        float fromy = y + 0.5f;
-        float tox = fromx + (r * sintable[j]);
-        float toy = fromy + (r * costable[j]);
-
-        int count = line(fromx, fromy, tox, toy, level_width, level_height, tiles, walls, positions);
-
-        for (int k=0; k<count; k++) {
-          if (check_tile(positions[k].x, positions[k].y) == TILE_NONE)
-            continue;
-          float val = MIN((k / r), 1.0f);
-          if (roll(2) == 1)
-            val = MIN(val + 0.15f, 1.0f);
-          int vala  = 100 * val;
-          int valb  = 50 * val;
-          int tindex = ((positions[k].y*level_width)+positions[k].x)*4;
-          light_map[tindex+0] = 150 - vala;
-          light_map[tindex+1] = 100 - vala;
-          light_map[tindex+2] = 0;
-          light_map[tindex+3] = MAX(0, MIN(light_map[tindex+3] | 50 - valb, 255));
-        }
-      }
-    }
-  }*/
 }
 
 void spell_render()
@@ -283,18 +358,28 @@ void spell_render()
       SDL_RenderCopyEx(renderer, tex_tiles, &ra, &rb, 0, NULL, SDL_FLIP_VERTICAL);
     }
   }
+}
 
+void spell_render_fire()
+{
   // render fire
-  int fx = MAX(0, floor(cx / tile_width) - 5);
-  int fy = MAX(0, floor(cy / tile_height) - 5);
-  int tx = MAX(0, MIN(fx + (window_width / tile_width) + 5, level_width));
-  int ty = MAX(0, MIN(fy + (game_height / tile_height) + 5, level_height));
-  SDL_SetTextureAlphaMod(tex_tiles, 150);
+  spell_t *spell;
+  SDL_Rect ra, rb;
+  ra.w = rtile_width;
+  ra.h = rtile_height;
+  rb.w = tile_width;
+  rb.h = tile_height;
+  int fx = MAX(0, floor(cx / tile_width) - 1);
+  int fy = MAX(0, floor(cy / tile_height) - 1);
+  int tx = MAX(0, MIN(fx + (window_width / tile_width) + 2, level_width));
+  int ty = MAX(0, MIN(fy + (game_height / tile_height) + 2, level_height));
   for (int y=fy; y<ty; y++) {
     for (int x=fx; x<tx; x++) {
       int index = (y*level_width)+x;
       if (!fire_map[index])
         continue;
+
+      SDL_SetTextureAlphaMod(tex_tiles, 50 + roll(50));
 
       ra.x = fire_tile.x;
       ra.y = fire_tile.y;

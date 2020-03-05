@@ -2,15 +2,24 @@
 #define SPELL_H
 
 #include "entity.h"
+#include <inttypes.h>
+
+#define FIRE_DAMAGE 1
+#define FIRE_BREAK_CHANCE 10
 
 enum {
   SPELL_FIREBOLT,
+  SPELL_WEB,
+  SPELL_SPIRIT,
+
   SPELL_NUM
 };
 
 enum {
   TILE_SPELL_FIREBOLT = 32,
-  TILE_SPELL_FIRE = 33
+  TILE_SPELL_FIRE = 33,
+  TILE_SPELL_WEB = 34,
+  TILE_SPELL_SPIRIT = 35,
 };
 
 typedef struct {
@@ -21,8 +30,11 @@ typedef struct {
   int range, firechance, speed;
   int damage, update;
   int alive, spell;
+  int lit;
   int *dmap;
 } spell_t;
+
+extern uint8_t *fire_map;
 
 int spell_get_range(int s);
 
@@ -39,5 +51,7 @@ void spell_hit(spell_t *spell);
 void spell_update_render();
 
 void spell_render();
+
+void spell_render_fire();
 
 #endif // SPELL_H

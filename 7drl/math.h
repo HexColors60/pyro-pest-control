@@ -134,7 +134,7 @@ static void dijkstra(int *arr, char *tiles, int walls[32], int x0, int y0, int x
             lowest = value;
         }
 
-        if (lowest < DIJ_MAX && lowest < arr[index]-1) {
+        if (lowest < DIJ_MAX && arr[index] > lowest+1) {
           arr[index] = lowest+1;
           changed++;
         }

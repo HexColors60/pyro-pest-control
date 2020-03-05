@@ -113,8 +113,8 @@ void loop()
           continue;
 
         if (level.layers[level.layer].tiles[(y*level_width)+x] == TILE_WOOD_FLOOR) {
-
           enemy_new(ENEMY_TYPE_SKELETON + (rand() % 5), x, y);
+          enemy_new(ENEMY_TYPE_SHAMEN, x, y);
           i--;
         }
       }
@@ -188,9 +188,9 @@ void loop()
   // repeat until all are done updating
   if (update && tick > 1.0f / 16.0f) {
     if (spell_ready()) {
-      update = player_update();
-      entity_update();
       spell_update();
+      entity_update();
+      update = player_update();
       tick = 0.0f;
     }
   }
@@ -335,11 +335,21 @@ void loop()
   tox = MAX(0, MIN(fromx + (window_width / tile_width), level_width));
   toy = MAX(0, MIN(fromy + (game_height / tile_height) + 2, level_height));
   int count = ((window_width / tile_width) + 2) * 4;
+
+  int errx = 0;
+  if (fromx < 0)
+    errx = abs(fromx);
+  if (fromx > level_width)
+    errx = (fromx - level_width);
+  fromx += errx;
+  tox -= errx;
+  count -= errx * 4;
+
   for (int y=fromy; y<toy; y++) {
     if (y < 0 || y > level_height)
       continue;
     int index = ((y*level_width)+fromx)*4;
-    memcpy(&pixels[(y-fromy)*pitch], &light_map[index], count);
+    memcpy(&pixels[((y-fromy)*pitch)+(errx*4)], &light_map[index], count);
   }
 
   SDL_UnlockTexture(tex_fov);
@@ -358,13 +368,15 @@ void loop()
   r.x = 0, r.y = 0, r.w = window_width, r.h = game_height;
   SDL_RenderCopy(renderer, tex_map, NULL, &r);
 
-  // render entities
+  spell_render_fire();
+
   entity_render();
 
   player_render();
 
   spell_render();
 
+  // FoV/lighting
   float rcx = (cx / tile_width);
   float rcy = (cy / tile_height);
   r.x = ((floor(rcx) - rcx) * tile_width) - 1;
@@ -372,6 +384,34 @@ void loop()
   r.w = ((window_width / tile_width) + 2) * tile_width;
   r.h = ((game_height / tile_height) + 2) * tile_height;
   SDL_RenderCopy(renderer, tex_fov, NULL, &r);
+
+  // player ui
+  // max hp
+  char buff[512];
+  for (int i=0; i<player->hp_max; i++)
+    buff[i] = (char)3;
+  buff[player->hp_max] = '\0';
+  SDL_SetTextureColorMod(tex_font, 255, 255, 255);
+  SDL_SetTextureAlphaMod(tex_font, 100);
+  text_render(buff, 24, 16);
+
+  // current hp
+  for (int i=0; i<player->hp; i++)
+    buff[i] = (char)3;
+  buff[player->hp] = '\0';
+  SDL_SetTextureColorMod(tex_font, 255, 46, 136);
+  SDL_SetTextureAlphaMod(tex_font, 255);
+  text_render(buff, 24, 16);
+
+  // inventory
+  SDL_SetTextureColorMod(tex_font, 255, 255, 255);
+  SDL_SetTextureAlphaMod(tex_font, 255);
+  sprintf(buff, "%c backpack %c", 4, 4);
+  text_render(buff, 16, 32);
+  for (int i=0; i<4; i++) {
+    sprintf(buff, "[%i] %c %s\n", i+1, 26, "empty");
+    text_render(buff, 16, 48 + i * 16);
+  }
 
   // render text box
   text_log_render();

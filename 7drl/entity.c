@@ -42,7 +42,7 @@ void entity_set_tile(entity_t *e, int i, size_t index)
   memcpy(&e->tiles[i], &t, sizeof(ivec2_t));
 }
 
-void entity_hit(int x, int y, int damage)
+void entity_hit(int x, int y, int damage, int type)
 {
   entity_t *e;
   for (int i=0; i<ENTITY_MAX; i++) {
@@ -51,10 +51,10 @@ void entity_hit(int x, int y, int damage)
     if (!e->alive || e->to.x != x || e->to.y != y)
       continue;
 
-    damage = MAX(1, damage - e->resist) + (roll(2) - 1);
+    damage = damage > 0 ? MAX(1, damage - e->resist) + (roll(2) - 1) : 0;
 
     if (e->onhit)
-      e->onhit(e, damage);
+      e->onhit(e, damage, type);
 
     e->hp -= damage;
     if (e->hp <= 0) {
@@ -74,8 +74,8 @@ void entity_update()
     if (!e->alive)
       continue;
 
-    if (e->update)
-      e->update(e);
+    if (e->stuck)
+      e->walking = 0;
 
     // walk
     if (e->walking && e->dmap) {
@@ -84,9 +84,10 @@ void entity_update()
         int ex = e->to.x;
         int ey = e->to.y;
         int findx = ex, findy = ey;
-        int lowest=e->dmap[(ey*level_width)+ex];
+        int initial = e->dmap[(ey*level_width)+ex];
+        int lowest = initial;
 
-        if (!lowest) {
+        if (lowest == e->distance) {
           e->walking = 0;
           continue;
         }
@@ -95,6 +96,9 @@ void entity_update()
           int tx = MAX(0, MIN(ex + around_adjacent[j][0], level_width));
           int ty = MAX(0, MIN(ey + around_adjacent[j][1], level_height));
           int tile = level.layers[level.layer].tiles[(ty*level_width)+tx];
+
+          if (tx == ex && ty == ey)
+            continue;
 
           if (check_solid(tile))
             continue;
@@ -118,7 +122,7 @@ void entity_update()
           }
 
           // is it the lowest value tile?
-          if (value < lowest) {
+          if ((value < lowest && value >= e->distance) || (lowest < e->distance && value > lowest)) {
             lowest = value;
             findx  = tx;
             findy  = ty;
@@ -135,15 +139,33 @@ void entity_update()
           e->to.x = (float)findx;
           e->to.y = (float)findy;
 
-          if (!lowest)
+          if (lowest == e->distance)
             e->walking = 0;
 
           if (found_tile == TILE_DOOR_CLOSED) {
             update_chunk(findx * tile_width, findy * tile_height, TILE_DOOR_OPEN);
           }
+
+          if (initial != DIJ_MAX && initial == lowest) {
+            e->walking = 0;
+            break;
+          }
         }
       }
     }
+  }
+
+  for (int i=0; i<ENTITY_MAX; i++) {
+    e = &entity_list[i];
+
+    if (!e->alive)
+      continue;
+
+    if (e->update)
+      e->update(e);
+
+    if (e->stuck)
+      e->stuck--;
   }
 }
 
@@ -171,6 +193,13 @@ void entity_update_render()
 
     if (!e->alive)
       continue;
+
+    if (e->hp <= 0) {
+      e->alive = 0;
+      if (e->ondeath)
+        e->ondeath(e);
+      continue;
+    }
 
     if (e->pos.x == e->to.x && e->pos.y == e->to.y)
       e->updating = 0;

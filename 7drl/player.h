@@ -11,6 +11,8 @@ extern int *dmap_to_player, *dmap_from_player, *dmap_to_mouse;
 
 void player_init(int x, int y);
 
+void player_hit(entity_t *e, int damage, int type);
+
 void player_light();
 
 void player_fire();
