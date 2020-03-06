@@ -13,9 +13,11 @@
 #include "spell.h"
 #include "enemy.h"
 
+#define MAX_LAYER 10
+
 // sdl vars
-SDL_Window *window;
-SDL_Renderer *renderer;
+SDL_Window *window = NULL;
+SDL_Renderer *renderer = NULL;
 
 // camera vars
 float camx = 512.0f, camy = 512.0f;
@@ -30,19 +32,142 @@ const double phys_delta_time   = 1.0 / 60.0;
 const double slowest_frame     = 1.0 / 15.0;
 double delta_time, tick        = 0.0;
 double last_frame_time         = 0.0;
-int init = 0;
+int init = 0, reinit = 0, goingdown = 0;
 
 // level vars
-SDL_Texture *tex_tiles, *tex_map, *tex_fov;
+SDL_Texture *tex_tiles = NULL, *tex_map = NULL, *tex_fov = NULL;
 int tiles_tex_width = 0, tiles_tex_height = 0;
 level_t level;
 level_texture_t level_textures;
 int level_width = 0, level_height = 0;
+int layer = 0;
 
 // input
 uint8_t keys_down[SDL_NUM_SCANCODES];
 void keypressed(int key);
 void input(SDL_Event *event);
+
+void pickspawn(int *xpos, int *ypos, int dist)
+{
+  for (int i=0; i<10000; i++) {
+    if (roll(200) > 5)
+      continue;
+
+    int x = rand() % level_width;
+    int y = rand() % level_height;
+
+    int tile = level.layers[level.layer].tiles[(y*level_width)+x];
+
+    if (tile == TILE_WOOD_FLOOR || tile == TILE_STONE_FLOOR) {
+      int d = hypot(x - player->to.x, y - player->to.y);
+      if (d >= dist) {
+        *xpos = x;
+        *ypos = y;
+        return;
+      }
+    }
+
+  }
+}
+
+void spawn()
+{
+  int count = (MAX(layer, 2) * 5) + roll(10);
+  int sx, sy;
+  printf("Spawning %i enemies\n", count);
+  for (int i=0; i<count; i++) {
+    if (layer < 3) {
+      // skeleton goblin rat
+      pickspawn(&sx, &sy, 20);
+      enemy_new(ENEMY_TYPE_SKELETON + (rand() % 3), sx, sy);
+    }
+    else if (layer >= 3 && layer <= 6) {
+      // skeleton goblin rat slime spider
+      pickspawn(&sx, &sy, 15);
+      enemy_new(ENEMY_TYPE_SKELETON + (rand() % 5), sx, sy);
+    } else {
+      // skeleton goblin rat slime spider shaman
+      pickspawn(&sx, &sy, 10);
+      enemy_new(ENEMY_TYPE_SKELETON + (rand() % 6), sx, sy);
+    }
+  }
+}
+
+void godown()
+{
+  update = 0;
+
+  // generate the level
+  level.layer = 0;
+  level.max   = 10 + roll(10);
+  while (!gen(&level.layers[0])) {};
+  level_width  = level.layers[level.layer].width;
+  level_height = level.layers[level.layer].height;
+
+  // reinit entity stuff
+  entity_init();
+
+  player->alive = 1;
+  player->pos.x = level.layers[level.layer].sx;
+  player->pos.y = level.layers[level.layer].sy;
+  player->to.x  = level.layers[level.layer].sx;
+  player->to.y  = level.layers[level.layer].sy;
+
+  player_reinit();
+
+  spawn();
+
+  // set exit
+  if (layer < MAX_LAYER) {
+    level.layers[level.layer].tiles[(level.layers[level.layer].ey*level_width)+level.layers[level.layer].ex] = TILE_EXIT;
+  }
+
+  for (int i=0; i<CHUNK_COUNT; i++) {
+    level_textures.chunks[i].update     = 1;
+    level_textures.chunks[i].tile_count = 0;
+    level_textures.chunks[i].count      = 0;
+  }
+
+  SDL_SetTextureAlphaMod(tex_font, 255);
+  SDL_SetTextureAlphaMod(tex_tiles, 255);
+  SDL_SetTextureAlphaMod(tex_map, 255);
+  SDL_SetTextureAlphaMod(tex_fov, 255);
+
+  // reinit spell system
+  spell_init();
+
+  // reinit text log stuff
+  text_init();
+
+  layer++;
+}
+
+void start()
+{
+  // generate the level
+  level.layer = 0;
+  level.max   = 10 + roll(10);
+  while (!gen(&level.layers[0])) {};
+  level_width  = level.layers[level.layer].width;
+  level_height = level.layers[level.layer].height;
+
+  // init entity stuff
+  entity_init();
+
+  // init player
+  player_init(level.layers[level.layer].sx, level.layers[level.layer].sy);
+
+  // set exit
+  level.layers[level.layer].tiles[(level.layers[level.layer].ey*level_width)+level.layers[level.layer].ex] = TILE_EXIT;
+
+  spawn();
+
+  // init spell system
+  spell_init();
+
+  // setup vga atlas etc
+  text_init();
+}
 
 void loop()
 {
@@ -52,79 +177,52 @@ void loop()
   if (!init) {
     init++;
 
-    // init SDL
-    if (!SDL_Init(SDL_INIT_EVERYTHING)) {
-      printf("Failed to init SDL2\n");
-      return;
+    if (!reinit) {
+      // init SDL
+      if (!SDL_Init(SDL_INIT_EVERYTHING)) {
+        printf("Failed to init SDL2\n");
+        return;
+      }
+
+      // init window
+      window = SDL_CreateWindow("rl", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_width, window_height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+
+      // init renderer
+      renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+      // nearest filtering
+      SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+
+      // dt stuff
+      last_frame_time = SDL_GetPerformanceCounter();
+
+      // load textures
+      tex_tiles = texture_load("tiles.png", &tiles_tex_width, &tiles_tex_height);
+      SDL_SetTextureBlendMode(tex_tiles, SDL_BLENDMODE_BLEND);
+
+      // screen render target
+      tex_map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, window_width, game_height);
+
+      // field of view light map
+      tex_fov = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, (window_width / tile_width) + 2, (game_height / tile_height) + 2);
+      SDL_SetTextureBlendMode(tex_fov, SDL_BLENDMODE_BLEND);
+
+      for (int i=0; i<CHUNK_COUNT; i++) {
+        level_textures.chunks[i].tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, CHUNK_WIDTH, CHUNK_HEIGHT);
+      }
+
+      level.layers[0].tiles = NULL;
     }
 
-    // init window
-    window = SDL_CreateWindow("rl", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_width, window_height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-
-    // init renderer
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-    // nearest filtering
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
-
-    // dt stuff
-    last_frame_time = SDL_GetPerformanceCounter();
-
-    // load textures
-    tex_tiles = texture_load("tiles.png", &tiles_tex_width, &tiles_tex_height);
-    SDL_SetTextureBlendMode(tex_tiles, SDL_BLENDMODE_BLEND);
-
-    // screen render target
-    tex_map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, window_width, game_height);
-
-    // field of view light map
-    tex_fov = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, (window_width / tile_width) + 2, (game_height / tile_height) + 2);
-    SDL_SetTextureBlendMode(tex_fov, SDL_BLENDMODE_BLEND);
-
     for (int i=0; i<CHUNK_COUNT; i++) {
-      level_textures.chunks[i].tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, CHUNK_WIDTH, CHUNK_HEIGHT);
       level_textures.chunks[i].update     = 1;
       level_textures.chunks[i].tile_count = 0;
       level_textures.chunks[i].count      = 0;
     }
 
-    // generate the first 3 layers
-    level.layer = 0;
-    level.max   = 10 + roll(10);
-    for (int i=0; i<2; i++) {
-      while (!gen(&level.layers[i])) {};
-    }
-    level_width  = level.layers[level.layer].width;
-    level_height = level.layers[level.layer].height;
+    start();
 
-    // init entity stuff
-    entity_init();
-
-    // init player
-    player_init(level.layers[level.layer].sx, level.layers[level.layer].sy);
-
-    int i = 150;
-    for (int y=0; y<level_height; y++) {
-      for (int x=0; x<level_height; x++) {
-        if (!i)
-          break;
-
-        if (roll(200) > 5)
-          continue;
-
-        if (level.layers[level.layer].tiles[(y*level_width)+x] == TILE_WOOD_FLOOR) {
-          enemy_new(ENEMY_TYPE_SKELETON + (rand() % 5), x, y);
-          enemy_new(ENEMY_TYPE_SHAMEN, x, y);
-          i--;
-        }
-      }
-    }
-
-    // init spell system
-    spell_init();
-
-    // setup vga atlas etc
-    text_init();
+    reinit++;
   }
   /*----------------------------------------*/
 
@@ -188,8 +286,8 @@ void loop()
   // repeat until all are done updating
   if (update && tick > 1.0f / 16.0f) {
     if (spell_ready()) {
-      spell_update();
       entity_update();
+      spell_update();
       update = player_update();
       tick = 0.0f;
     }
@@ -216,14 +314,13 @@ void loop()
 
       level_textures.chunks[index].update = 0;
 
-      if (!count)
-        level_textures.chunks[index].tile_count = 0;
-
       SDL_SetRenderTarget(renderer, level_textures.chunks[index].tex);
       SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 
-      if (!init)
+      if (!count) {
+        level_textures.chunks[index].tile_count = 0;
         SDL_RenderClear(renderer);
+      }
 
       SDL_Rect ra, rb;
       int w  = level_width;
@@ -372,8 +469,6 @@ void loop()
 
   entity_render();
 
-  player_render();
-
   spell_render();
 
   // FoV/lighting
@@ -393,7 +488,7 @@ void loop()
   buff[player->hp_max] = '\0';
   SDL_SetTextureColorMod(tex_font, 255, 255, 255);
   SDL_SetTextureAlphaMod(tex_font, 100);
-  text_render(buff, 24, 16);
+  text_render(buff, 16, 16);
 
   // current hp
   for (int i=0; i<player->hp; i++)
@@ -401,20 +496,42 @@ void loop()
   buff[player->hp] = '\0';
   SDL_SetTextureColorMod(tex_font, 255, 46, 136);
   SDL_SetTextureAlphaMod(tex_font, 255);
-  text_render(buff, 24, 16);
+  text_render(buff, 16, 16);
 
   // inventory
+  int y = 48;
   SDL_SetTextureColorMod(tex_font, 255, 255, 255);
   SDL_SetTextureAlphaMod(tex_font, 255);
   sprintf(buff, "%c backpack %c", 4, 4);
-  text_render(buff, 16, 32);
-  for (int i=0; i<4; i++) {
+  text_render(buff, 16, y);
+  for (int i=0; i<5; i++) {
+    y += 16;
     sprintf(buff, "[%i] %c %s\n", i+1, 26, "empty");
-    text_render(buff, 16, 48 + i * 16);
+    text_render(buff, 16, y);
   }
+  y+=32;
+  sprintf(buff, "%c actions %c", 4, 4);
+  text_render(buff, 16, y);
+  y+=16;
+  sprintf(buff, "[c] %c %s\n", 26, "toggle door");
+  text_render(buff, 16, y);
+  y+=16;
+  sprintf(buff, "[space] %c %s\n", 26, "interact");
+  text_render(buff, 16, y);
+  y+=16;
+
+  player_render();
 
   // render text box
   text_log_render();
+
+  // handle reset
+  if (!player->alive) {
+    text_render("press R to restart", 16, 214);
+    if (keys_down[SDL_SCANCODE_R]) {
+      init = 0;
+    }
+  }
 
   SDL_RenderPresent(renderer);
   /*----------------------------------------*/
@@ -423,6 +540,10 @@ void loop()
 void keypressed(int key)
 {
   player_keypress(key);
+
+  if (key == SDL_SCANCODE_SPACE && check_tile(player->to.x, player->to.y) == TILE_EXIT) {
+    godown();
+  }
 }
 
 void mousepress(int key)

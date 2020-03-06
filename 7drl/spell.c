@@ -7,14 +7,16 @@
 
 #define SPELL_MAX 512
 
-uint8_t *fire_map, *fire_map_copy;
+uint8_t *fire_map = NULL, *fire_map_copy = NULL;
 
-spell_t *spell_list;
+spell_t *spell_list = NULL;
 ivec2_t fire_tile;
 
 void spell_init()
 {
   // initialize entity list
+  if (spell_list)
+    free(spell_list);
   spell_list = malloc(sizeof(spell_t) * SPELL_MAX);
 
   spell_t *spell;
@@ -23,6 +25,10 @@ void spell_init()
     spell->alive = 0;
   }
 
+  if (fire_map)
+    free(fire_map);
+  if (fire_map_copy)
+    free(fire_map_copy);
   fire_map = malloc(level_width * level_height);
   fire_map_copy = malloc(level_width * level_height);
   memset(fire_map, 0, level_width * level_height);
@@ -41,6 +47,27 @@ int spell_get_range(int s)
       return 10;
       break;
     }
+    case SPELL_FIRESURGE: {
+      return 8;
+      break;
+    }
+    case SPELL_FIRESTORM: {
+      return 20;
+      break;
+    }
+    case SPELL_FIRESPRAY: {
+      return 1;
+      break;
+    }
+    case SPELL_FIREPUSH: {
+      return 1;
+      break;
+    }
+
+    case SPELL_FIREJUMP: {
+      return 5;
+      break;
+    }
     case SPELL_WEB: {
       return 10;
       break;
@@ -49,12 +76,80 @@ int spell_get_range(int s)
       return 50;
       break;
     }
+    case CLOSE_DOOR: {
+      return 1;
+      break;
+    }
   }
 
   return 0;
 }
 
 void spell_new(int s, int x0, int y0, int x1, int y1)
+{
+  switch (s) {
+    case SPELL_FIRESURGE: {
+      for (int j=0; j<8; j++) {
+        if (roll(10) > 8)
+          continue;
+
+        int tx = MAX(0, MIN(x1 + around[j][0], level_width));
+        int ty = MAX(0, MIN(y1 + around[j][1], level_height));
+        int tile = level.layers[level.layer].tiles[(ty*level_width)+tx];
+
+        if (tile != TILE_WOOD_FLOOR && tile != TILE_STONE_FLOOR && tile != TILE_DOOR_OPEN)
+          continue;
+
+        spell_newr(SPELL_FIREBOLT, x0, y0, tx, ty);
+      }
+      spell_newr(SPELL_FIREBOLT, x0, y0, x1, y1);
+      return;
+    }
+    case SPELL_FIRESPRAY: {
+      ivec2_t positions[512] = {0};
+
+      // collidable tiles
+      int walls[32] = {-1};
+        for (int i=0; i<SOLID_COUNT; i++)
+          walls[i] = solid[i];
+      walls[SOLID_COUNT-1] = TILE_DOOR_CLOSED;
+
+      char *tiles = level.layers[level.layer].tiles;
+      float r = 8.5f;
+      for (int j=0; j<360; j+=8) {
+        float fromx = x0 + 0.5f;
+        float fromy = y0 + 0.5f;
+        float tox = fromx + (r * sintable[j]);
+        float toy = fromy + (r * costable[j]);
+
+        int count = line(fromx, fromy, tox, toy, level_width, level_height, tiles, walls, positions);
+
+        for (int k=1; k<count-1; k++) {
+          entity_t *e;
+          int hit = 0;
+          for (int i=0; i<ENTITY_MAX; i++) {
+            e = &entity_list[i];
+
+            if (e->alive && e->to.x == positions[k].x && e->to.y == positions[k].y) {
+              hit = 1;
+              break;
+            }
+          }
+
+          if (hit || k == count-2) {
+            spell_newr(SPELL_FIRESPRAY, x0, y0, positions[k].x, positions[k].y);
+            break;
+          }
+        }
+      }
+      return;
+    }
+  }
+
+  spell_newr(s, x0, y0, x1, y1);
+}
+
+void spell_newr(int s, int x0, int y0, int x1, int y1)
 {
   // get a new spell instance
   spell_t *spell = NULL;
@@ -82,6 +177,22 @@ void spell_new(int s, int x0, int y0, int x1, int y1)
       spell->speed      = 20;
       spell->damage     = 3;
       tile = TILE_SPELL_FIREBOLT;
+      break;
+    }
+    case SPELL_FIRESTORM: {
+      spell->range      = spell_get_range(s);
+      spell->firechance = 1;
+      spell->speed      = 15;
+      spell->damage     = 8;
+      tile = TILE_SPELL_FIRESTORM;
+      break;
+    }
+    case SPELL_FIRESPRAY: {
+      spell->range      = spell_get_range(s);
+      spell->firechance = 6;
+      spell->speed      = 15;
+      spell->damage     = 1;
+      tile = TILE_SPELL_FIRESPRAY;
       break;
     }
     case SPELL_WEB: {
@@ -212,9 +323,23 @@ void spell_hit(spell_t *spell)
       fire_map[tindex] = 5 + roll(3);
   }
 
-  switch (spell->spell) {
-    case SPELL_FIREBOLT: {
 
+  // collidable tiles
+  int walls[32] = {-1};
+    for (int i=0; i<SOLID_COUNT; i++)
+      walls[i] = solid[i];
+  walls[SOLID_COUNT] = TILE_DOOR_CLOSED;
+
+  char *tiles = level.layers[level.layer].tiles;
+  ivec2_t positions[512] = {0};
+
+  switch (spell->spell) {
+    case SPELL_FIRESTORM: {
+      for (int i=0; i<32; i++) {
+        int x = -6 + roll(10);
+        int y = -6 + roll(10);
+        spell_new(SPELL_FIREBOLT, spell->to.x-x, spell->to.y-30-y, spell->to.x+x, spell->to.y+y);
+      }
       break;
     }
   }

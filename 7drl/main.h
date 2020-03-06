@@ -42,7 +42,7 @@ typedef struct {
 } map_t;
 
 typedef struct {
-  map_t layers[50];
+  map_t layers[1];
   int layer, max;
 } level_t;
 

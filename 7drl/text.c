@@ -8,7 +8,7 @@
 
 #include <inttypes.h>
 
-SDL_Texture *tex_font, *tex_ui, *tex_text;
+SDL_Texture *tex_font = NULL, *tex_text = NULL;
 
 #define LOG_MAX 7
 #define TEXT_AREA_WIDTH  515
@@ -65,7 +65,8 @@ void text_init()
   }
 
   // generate our texture
-  tex_font = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, VGA_WIDTH, VGA_HEIGHT);
+  if (!tex_font)
+    tex_font = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, VGA_WIDTH, VGA_HEIGHT);
   SDL_SetTextureBlendMode(tex_font, SDL_BLENDMODE_BLEND);
 
   // update it with the pixeldata
@@ -73,7 +74,8 @@ void text_init()
 
   // text is rendered to this every time its updated
   // this is then rendered to the screen
-  tex_text = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEXT_AREA_WIDTH, TEXT_AREA_HEIGHT);
+  if (!tex_text)
+    tex_text = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEXT_AREA_WIDTH, TEXT_AREA_HEIGHT);
   SDL_SetTextureBlendMode(tex_text, SDL_BLENDMODE_BLEND);
 
   // set the log to an empty state
@@ -81,9 +83,6 @@ void text_init()
 
   // initialize the text log texture target
   text_log_add("\0");
-
-  // ui bg texture, move this elsewhere
-  tex_ui = texture_load("ui.png", NULL, NULL);
 
   free(data);
 }

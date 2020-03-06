@@ -3,6 +3,8 @@
 
 #include "math.h"
 
+#define ENTITY_MAX 1024
+
 typedef struct {
   fvec2_t pos, to;
   ivec2_t tiles[2];
@@ -20,9 +22,13 @@ typedef struct {
   void (*attack)(void *e, int first, int dist);
 } entity_t;
 
+extern entity_t *entity_list;
+
 void entity_init();
 
 void entity_hit(int x, int y, int damage, int type);
+
+void entity_push(int x, int y, int dx, int dy);
 
 void entity_update();
 

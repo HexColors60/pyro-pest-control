@@ -9,7 +9,10 @@ enum {
   ENEMY_TYPE_RAT,
   ENEMY_TYPE_SLIME,
   ENEMY_TYPE_SPIDER,
-  ENEMY_TYPE_SHAMEN
+  ENEMY_TYPE_SHAMEN,
+  ENEMY_TYPE_BSLIME,
+
+  ENEMY_TYPE_NUM
 };
 
 enum {
@@ -18,7 +21,8 @@ enum {
   ENEMY_TILE_RAT      = 19,
   ENEMY_TILE_SLIME    = 20,
   ENEMY_TILE_SPIDER   = 21,
-  ENEMY_TILE_SHAMEN   = 22
+  ENEMY_TILE_SHAMEN   = 22,
+  ENEMY_TILE_BSLIME   = 23
 };
 
 void enemy_new(int enemy, int x, int y);

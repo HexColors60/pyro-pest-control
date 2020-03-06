@@ -1117,6 +1117,11 @@ int gen(map_t *map)
       break;
   }
 
+  if (map->tiles) {
+    free(map->tiles);
+    map->tiles = NULL;
+  }
+
   // convert to appropriate tile values
   map->tiles = malloc(sizeof(uint8_t) * level.width * level.height);
   memset(map->tiles, 0, sizeof(uint8_t) * level.width * level.height);

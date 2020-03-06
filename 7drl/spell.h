@@ -9,14 +9,24 @@
 
 enum {
   SPELL_FIREBOLT,
+  SPELL_FIRESURGE,
+  SPELL_FIRESTORM,
+  SPELL_FIRESPRAY,
+  SPELL_FIREPUSH,
+  SPELL_FIREJUMP,
   SPELL_WEB,
   SPELL_SPIRIT,
 
-  SPELL_NUM
+  SPELL_NUM,
+
+  CLOSE_DOOR
 };
 
 enum {
   TILE_SPELL_FIREBOLT = 32,
+  TILE_SPELL_FIRESURGE = 32,
+  TILE_SPELL_FIRESTORM = 32,
+  TILE_SPELL_FIRESPRAY = 32,
   TILE_SPELL_FIRE = 33,
   TILE_SPELL_WEB = 34,
   TILE_SPELL_SPIRIT = 35,
@@ -41,6 +51,8 @@ int spell_get_range(int s);
 void spell_init();
 
 void spell_new(int s, int x0, int y0, int x1, int y1);
+
+void spell_newr(int s, int x0, int y0, int x1, int y1);
 
 void spell_update();
 

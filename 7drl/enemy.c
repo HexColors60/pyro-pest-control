@@ -12,6 +12,9 @@ void rat_attack(entity_t *e, int first, int dist);
 void slime_attack(entity_t *e, int first, int dist);
 void spider_attack(entity_t *e, int first, int dist);
 void shamen_attack(entity_t *e, int first, int dist);
+void bslime_attack(entity_t *e, int first, int dist);
+
+void slime_die(entity_t *e);
 
 void enemy_new(int enemy, int x, int y)
 {
@@ -70,6 +73,7 @@ void enemy_new(int enemy, int x, int y)
       e->speed  = 1;
       e->update = enemy_update;
       e->attack = slime_attack;
+      e->ondeath= slime_die;
       e->hp     = 8;
       e->lowhp  = 0;
       e->resist = -1;
@@ -95,6 +99,16 @@ void enemy_new(int enemy, int x, int y)
       e->resist = 1;
       e->lowhp  = 3;
       e->distance = 5;
+      break;
+    }
+    case ENEMY_TYPE_BSLIME: {
+      tile      = ENEMY_TILE_BSLIME;
+      e->speed  = 2;
+      e->update = enemy_update;
+      e->attack = bslime_attack;
+      e->hp     = 3;
+      e->resist = 0;
+      e->lowhp  = 0;
       break;
     }
   }
@@ -132,6 +146,10 @@ void enemy_hit(entity_t *e, int damage, int type)
     }
     case ENEMY_TYPE_SHAMEN: {
       sprintf(buff, "Shamen suffers %i damage", damage);
+      break;
+    }
+    case ENEMY_TYPE_BSLIME: {
+      sprintf(buff, "Baby slime suffers %i damage", damage);
       break;
     }
   }
@@ -176,6 +194,11 @@ void enemy_update(entity_t *e)
 
   int d = hypot(e->to.x - player->to.x, e->to.y - player->to.y);
 
+  // heal
+  if (d > 15 && e->hp < e->hp_max) {
+    e->hp++;
+  }
+
   if (pos[count-1].x == player->to.x && pos[count-1].y == player->to.y) {
     if (e->attack && !e->aggro)
       e->attack(e, 1, d);
@@ -190,7 +213,7 @@ void skeleton_attack(entity_t *e, int first, int dist)
   if (first)
     text_log_add("The skeleton notices you");
 
-  if (e->last_attack <= 0 && dist <= 1) {
+  if (e->aggro && e->last_attack <= 0 && dist <= 1) {
     player->hp -= 2;
     text_log_add("The skeleton hits you for 2 damage");
     e->last_attack = 2;
@@ -202,7 +225,7 @@ void goblin_attack(entity_t *e, int first, int dist)
   if (first)
     text_log_add("The goblin notices you");
 
-  if (e->last_attack <= 0 && dist <= 1) {
+  if (e->aggro && e->last_attack <= 0 && dist <= 1) {
     player->hp -= 2;
     text_log_add("The goblin hits you for 2 damage");
     e->last_attack = 2;
@@ -214,7 +237,7 @@ void rat_attack(entity_t *e, int first, int dist)
   if (first)
     text_log_add("The rat notices you");
 
-  if (e->last_attack <= 0 && dist <= 1) {
+  if (e->aggro && e->last_attack <= 0 && dist <= 1) {
     player->hp -= 2;
     text_log_add("The rat hits you for 1 damage");
     e->last_attack = 1;
@@ -226,7 +249,7 @@ void slime_attack(entity_t *e, int first, int dist)
   if (first)
     text_log_add("The slime notices you");
 
-  if (e->last_attack <= 0 && dist <= 1) {
+  if (e->aggro && e->last_attack <= 0 && dist <= 1) {
     player->hp -= 3;
     text_log_add("The slime hits you for 3 damage");
     e->last_attack = 3;
@@ -239,9 +262,15 @@ void spider_attack(entity_t *e, int first, int dist)
   if (first)
     text_log_add("The spider notices you");
 
-  if (e->last_attack <= 0 && dist <= e->distance + 3) {
-    spell_new(SPELL_WEB, e->to.x, e->to.y, player->to.x, player->to.y);
-    e->last_attack = 3;
+  if (e->last_attack <= 0 && dist <= e->distance + 5) {
+    int errx = 0;
+    int erry = 0;
+    if (roll(5) >= 3) {
+      errx = -2 + roll(3);
+      erry = -2 + roll(3);
+    }
+    spell_new(SPELL_WEB, e->to.x, e->to.y, player->to.x + errx, player->to.y + erry);
+    e->last_attack = roll(2);
   }
 }
 
@@ -251,8 +280,45 @@ void shamen_attack(entity_t *e, int first, int dist)
   if (first)
     text_log_add("The shamen notices you");
 
-  if (e->last_attack <= 0 && dist <= e->distance + 5) {
-    spell_new(SPELL_SPIRIT, e->to.x, e->to.y, player->to.x, player->to.y);
-    e->last_attack = 5;
+  if (e->aggro && e->last_attack <= 0 && dist <= e->distance + 5) {
+    int errx = 0;
+    int erry = 0;
+    if (roll(2) == 1) {
+      errx = -2 + roll(3);
+      erry = -2 + roll(3);
+    }
+    spell_new(SPELL_SPIRIT, e->to.x, e->to.y, player->to.x + errx, player->to.y+ erry);
+    e->last_attack = 4 + roll(3);
+  }
+}
+
+void bslime_attack(entity_t *e, int first, int dist)
+{
+  if (first)
+    text_log_add("The baby slime notices you");
+
+  if (e->aggro && e->last_attack <= 0 && dist <= 1) {
+    player->hp -= 1;
+    text_log_add("The baby slime hits you for 1 damage");
+    e->last_attack = 0;
+  }
+}
+
+void slime_die(entity_t *e)
+{
+  text_log_add("The slime splits into multiple smaller slimes");
+
+  for (int j=0; j<8; j++) {
+    int tx = MAX(0, MIN(e->to.x + around[j][0], level_width));
+    int ty = MAX(0, MIN(e->to.y + around[j][1], level_height));
+    int tile = level.layers[level.layer].tiles[(ty*level_width)+tx];
+
+    if (tx == e->to.x && ty == e->to.y)
+      continue;
+
+    if (tile != TILE_WOOD_FLOOR && tile != TILE_STONE_FLOOR)
+      continue;
+
+    enemy_new(ENEMY_TYPE_BSLIME, tx, ty);
   }
 }

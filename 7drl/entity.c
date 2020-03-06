@@ -4,20 +4,17 @@
 #include "player.h"
 #include <string.h>
 
-#define ENTITY_MAX 1024
-
-entity_t *entity_list;
+entity_t *entity_list = NULL;
 
 void entity_init()
 {
   // initialize entity list
-  entity_list = malloc(sizeof(entity_t) * ENTITY_MAX);
+  if (!entity_list)
+    entity_list = malloc(sizeof(entity_t) * ENTITY_MAX);
 
   entity_t *e;
   for (int i=0; i<ENTITY_MAX; i++) {
     e = &entity_list[i];
-    e->update = NULL;
-    e->onhit  = NULL;
     e->alive  = 0;
   }
 }
@@ -62,6 +59,32 @@ void entity_hit(int x, int y, int damage, int type)
       if (e->ondeath)
         e->ondeath(e);
     }
+  }
+}
+
+void entity_push(int x, int y, int dx, int dy)
+{
+  entity_t *e;
+  for (int i=0; i<ENTITY_MAX; i++) {
+    e = &entity_list[i];
+
+    if (!e->alive || e->to.x != x || e->to.y != y)
+      continue;
+
+    ivec2_t positions[512] = {0};
+
+    // collidable tiles
+    int walls[32] = {-1};
+      for (int i=0; i<SOLID_COUNT; i++)
+        walls[i] = solid[i];
+    walls[SOLID_COUNT-1] = TILE_DOOR_CLOSED;
+
+    char *tiles = level.layers[level.layer].tiles;
+
+    int count = line(x, y, x+dx, y+dy, level_width, level_height, tiles, walls, positions);
+
+    e->to.x = positions[count-2].x;
+    e->to.y = positions[count-2].y;
   }
 }
 

@@ -15,6 +15,8 @@ enum {
   TILE_DOOR_CLOSED,
   TILE_DOOR_OPEN,
 
+  TILE_EXIT,
+
   TILE_NUM
 };
 
