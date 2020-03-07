@@ -334,14 +334,14 @@ void loop()
         return;
       }
 
-      SDL_CaptureMouse(SDL_TRUE);
-      SDL_SetWindowInputFocus(window);
-
       // init window
       window = SDL_CreateWindow("rl", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_width, window_height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_INPUT_GRABBED);
 
       // init renderer
       renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+      SDL_CaptureMouse(SDL_TRUE);
+      SDL_SetWindowInputFocus(window);
 
       // nearest filtering
       SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
@@ -773,6 +773,9 @@ void keypressed(int key)
 
 void mousepress(int key)
 {
+  SDL_SetWindowInputFocus(window);
+  SDL_SetWindowGrab(window, SDL_TRUE);
+
   if (menu)
     return;
 

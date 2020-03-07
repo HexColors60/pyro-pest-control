@@ -1,5 +1,5 @@
 CC     =emcc
-CFLAGS =-g -Wall -Wno-unused -O3 -r -std=c99 -lSDL2 --closure 1 -flto --llvm-lto 1 -s INLINING_LIMIT=1
+CFLAGS =-Wall -Wno-unused -O3 -r -std=c99 -lSDL2 --closure 1 -flto --llvm-lto 1 -s INLINING_LIMIT=1
 ODIR   =obj
 BDIR   =build
 BIN    =rl.bc
