@@ -168,6 +168,10 @@ void player_init(int x, int y)
   entity_set_tile(player, 0, TILEI_PLAYER);
 
   player_reinit();
+
+  plevel = 0;
+  pkills = 0;
+  experience = 0;
 }
 
 void player_reinit()
@@ -191,9 +195,6 @@ void player_reinit()
   player_light();
 
   aiming = 0;
-  plevel = 0;
-  pkills = 0;
-  experience = 0;
 }
 
 void player_die(entity_t *e)
@@ -733,7 +734,11 @@ void player_keypress(int key)
       if (!inventory_add(item->item, item->uses)) {
         item_new(player->to.x, player->to.y, item->item, item->uses);
       }
+    } else {
+      text_log_add("You rest for a turn");
     }
+
+    update = 1;
   }
 
   if (active_spell == DROP_ITEM) {

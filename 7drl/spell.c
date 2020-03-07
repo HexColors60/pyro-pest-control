@@ -311,6 +311,10 @@ void spell_update()
       int t = check_tile(x, y);
       if (!fire_map[index] && roll(FIRE_BREAK_CHANCE) == 1 && t == TILE_WOOD_FLOOR) {
         update_chunk(x * tile_width, y * tile_height, TILE_WOOD_HOLE);
+        for (int i=0; i<ITEM_MAX; i++) {
+          if (item_list[i].pos.x == x && item_list[i].pos.y == y)
+            item_list[i].active = 0;
+        }
       }
     }
   }
