@@ -2,6 +2,7 @@
 #include "main.h"
 #include "generator.h"
 #include "player.h"
+#include "text.h"
 #include <string.h>
 
 entity_t *entity_list = NULL;
@@ -24,6 +25,7 @@ entity_t *entity_new()
   for (int i=0; i<ENTITY_MAX; i++) {
     if (!entity_list[i].alive) {
       memset(&entity_list[i], 0, sizeof(entity_t));
+      entity_list[i].solid = 1;
       return &entity_list[i];
     }
   }
@@ -45,8 +47,19 @@ void entity_hit(int x, int y, int damage, int type)
   for (int i=0; i<ENTITY_MAX; i++) {
     e = &entity_list[i];
 
-    if (!e->alive || e->to.x != x || e->to.y != y)
+    if (!e->alive)
       continue;
+
+    if (e->large) {
+      if ((e->to.x != x || e->to.y != y) &&
+        (e->to.x+1 != x || e->to.y != y) &&
+        (e->to.x != x || e->to.y+1 != y) &&
+        (e->to.x+1 != x || e->to.y+1 != y))
+        continue;
+    } else {
+      if (e->to.x != x || e->to.y != y)
+        continue;
+    }
 
     damage = damage > 0 ? MAX(1, damage - e->resist) + (roll(2) - 1) : 0;
 
@@ -55,9 +68,9 @@ void entity_hit(int x, int y, int damage, int type)
 
     e->hp -= damage;
     if (e->hp <= 0) {
-      e->alive = 0;
       if (e->ondeath)
         e->ondeath(e);
+      e->alive = 0;
     }
   }
 }
@@ -126,6 +139,9 @@ void entity_update()
           if (check_solid(tile))
             continue;
 
+          if (tile == TILE_DOOR_CLOSED && e->cantopen)
+            continue;
+
           int value = e->dmap[(ty*level_width)+tx];
 
           // make sure there's no other entity in the way
@@ -135,7 +151,7 @@ void entity_update()
               continue;
 
             e2 = &entity_list[k];
-            if (!e2->alive)
+            if (!e2->alive || !e2->solid)
               continue;
 
             if ((int)e2->to.x == tx && (int)e2->to.y == ty) {
@@ -159,14 +175,16 @@ void entity_update()
             break;
           }
 
-          e->to.x = (float)findx;
-          e->to.y = (float)findy;
-
-          if (lowest == e->distance)
+          if (lowest == e->distance || lowest == initial)
             e->walking = 0;
 
-          if (found_tile == TILE_DOOR_CLOSED) {
+          if (found_tile == TILE_DOOR_CLOSED && !e->cantopen) {
             update_chunk(findx * tile_width, findy * tile_height, TILE_DOOR_OPEN);
+            text_log_add("The door opens");
+            break;
+          } else {
+            e->to.x = (float)findx;
+            e->to.y = (float)findy;
           }
 
           if (initial != DIJ_MAX && initial == lowest) {
@@ -245,10 +263,6 @@ void entity_render()
 {
   entity_t *e;
   SDL_Rect ra, rb;
-  ra.w = rtile_width;
-  ra.h = rtile_height;
-  rb.w = tile_width;
-  rb.h = tile_height;
   for (int i=0; i<ENTITY_MAX; i++) {
     e = &entity_list[i];
 
@@ -273,6 +287,17 @@ void entity_render()
     ra.y = e->tiles[0].y;
     rb.x = (e->pos.x*tile_width)-cx;
     rb.y = (e->pos.y*tile_height)-cy;
+    if (e->large) {
+      rb.w = tile_width * 2;
+      rb.h = tile_height * 2;
+      ra.w = rtile_width * 2;
+      ra.h = rtile_height * 2;
+    } else {
+      rb.w = tile_width;
+      rb.h = tile_height;
+      ra.w = rtile_width;
+      ra.h = rtile_height;
+    }
     SDL_RenderCopy(renderer, tex_tiles, &ra, &rb);
 
     // render a reflection

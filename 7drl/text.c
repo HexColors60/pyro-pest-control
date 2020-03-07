@@ -5,6 +5,7 @@
 #include "vga.h"
 #include "entity.h"
 #include "spell.h"
+#include "player.h"
 
 #include <inttypes.h>
 
@@ -84,11 +85,19 @@ void text_init()
   // initialize the text log texture target
   text_log_add("\0");
 
+  // lore
+  text_log_add("You descend into the dungeon in search of the rat king");
+  text_log_add("Defeat him on level 10 and then make your escape");
+  text_log_add("Prepare well, items are sparse deeper in the dungeon");
+
   free(data);
 }
 
 void text_log_add(const char *str)
 {
+  if (!player->alive)
+    return;
+
   memset(&text_log[text_logi][0], ' ', 512);
   memcpy(&text_log[text_logi++][0], str, MIN(strlen(str), 512));
   if (text_logi >= LOG_MAX)

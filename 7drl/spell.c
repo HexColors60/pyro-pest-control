@@ -4,6 +4,8 @@
 #include "math.h"
 #include "generator.h"
 #include "player.h"
+#include "text.h"
+#include "item.h"
 
 #define SPELL_MAX 512
 
@@ -77,6 +79,14 @@ int spell_get_range(int s)
       break;
     }
     case CLOSE_DOOR: {
+      return 1;
+      break;
+    }
+    case DROP_ITEM: {
+      return 0;
+      break;
+    }
+    case FALL_DOWN: {
       return 1;
       break;
     }
@@ -173,17 +183,17 @@ void spell_newr(int s, int x0, int y0, int x1, int y1)
   switch (s) {
     case SPELL_FIREBOLT: {
       spell->range      = spell_get_range(s);
-      spell->firechance = 1;
+      spell->firechance = 8;
       spell->speed      = 20;
-      spell->damage     = 3;
+      spell->damage     = 4;
       tile = TILE_SPELL_FIREBOLT;
       break;
     }
     case SPELL_FIRESTORM: {
       spell->range      = spell_get_range(s);
       spell->firechance = 1;
-      spell->speed      = 15;
-      spell->damage     = 8;
+      spell->speed      = 20;
+      spell->damage     = 15;
       tile = TILE_SPELL_FIRESTORM;
       break;
     }
@@ -191,7 +201,7 @@ void spell_newr(int s, int x0, int y0, int x1, int y1)
       spell->range      = spell_get_range(s);
       spell->firechance = 6;
       spell->speed      = 15;
-      spell->damage     = 1;
+      spell->damage     = 2;
       tile = TILE_SPELL_FIRESPRAY;
       break;
     }
@@ -278,6 +288,22 @@ void spell_update()
         }
       }
 
+      for (int i=0; i<ITEM_MAX; i++) {
+        if (item_list[i].active && item_list[i].pos.x == x && item_list[i].pos.y == y) {
+          if (item_list[i].item == ITEM_FLESH) {
+            item_list[i].item = ITEM_FOOD;
+            text_log_add("The fire cooks the raw flesh");
+            ivec2_t t;
+            int tw = tiles_tex_width  / rtile_width;
+            picktile(&t, ITEM_TILE_FOOD, tw, rtile_width, rtile_height);
+            memcpy(&item_list[i].tile, &t, sizeof(ivec2_t));
+          } else if (item_list[i].item != ITEM_FOOD) {
+            if (roll(5) == 1)
+              item_list[i].active = 0;
+          }
+        }
+      }
+
       entity_hit(x, y, FIRE_DAMAGE, -1);
       fire_map[index]--;
 
@@ -344,7 +370,7 @@ void spell_hit(spell_t *spell)
     }
   }
 
-  entity_hit(tx, ty, spell->damage, spell->spell);
+  entity_hit(tx, ty, spell->damage + plevel, spell->spell);
 
   spell->alive = 0;
 }

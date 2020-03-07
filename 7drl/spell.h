@@ -19,7 +19,9 @@ enum {
 
   SPELL_NUM,
 
-  CLOSE_DOOR
+  CLOSE_DOOR,
+  DROP_ITEM,
+  FALL_DOWN
 };
 
 enum {

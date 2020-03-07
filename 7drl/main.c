@@ -12,8 +12,7 @@
 #include "player.h"
 #include "spell.h"
 #include "enemy.h"
-
-#define MAX_LAYER 10
+#include "item.h"
 
 // sdl vars
 SDL_Window *window = NULL;
@@ -36,11 +35,15 @@ int init = 0, reinit = 0, goingdown = 0;
 
 // level vars
 SDL_Texture *tex_tiles = NULL, *tex_map = NULL, *tex_fov = NULL;
+SDL_Texture *tex_menu = NULL;
 int tiles_tex_width = 0, tiles_tex_height = 0;
 level_t level;
 level_texture_t level_textures;
 int level_width = 0, level_height = 0;
 int layer = 0;
+int menu = 1;
+int menuinout = 0;
+float menualpha = -0.2f;
 
 // input
 uint8_t keys_down[SDL_NUM_SCANCODES];
@@ -50,9 +53,6 @@ void input(SDL_Event *event);
 void pickspawn(int *xpos, int *ypos, int dist)
 {
   for (int i=0; i<10000; i++) {
-    if (roll(200) > 5)
-      continue;
-
     int x = rand() % level_width;
     int y = rand() % level_height;
 
@@ -66,35 +66,178 @@ void pickspawn(int *xpos, int *ypos, int dist)
         return;
       }
     }
-
   }
 }
 
 void spawn()
 {
-  int count = (MAX(layer, 2) * 5) + roll(10);
+  // enemy spawns
+  int count = MIN((layer+2) * 6, 50) + roll(MAX(layer, 1));
   int sx, sy;
-  printf("Spawning %i enemies\n", count);
   for (int i=0; i<count; i++) {
     if (layer < 3) {
       // skeleton goblin rat
-      pickspawn(&sx, &sy, 20);
-      enemy_new(ENEMY_TYPE_SKELETON + (rand() % 3), sx, sy);
+      int types[] = {
+        ENEMY_TYPE_SKELETON,
+        ENEMY_TYPE_SKELETON,
+        ENEMY_TYPE_GOBLIN,
+        ENEMY_TYPE_RAT,
+        ENEMY_TYPE_RAT
+      };
+      int enemy = types[rand() % 5];
+      pickspawn(&sx, &sy, 10);
+      enemy_new(enemy, sx, sy);
     }
     else if (layer >= 3 && layer <= 6) {
       // skeleton goblin rat slime spider
-      pickspawn(&sx, &sy, 15);
-      enemy_new(ENEMY_TYPE_SKELETON + (rand() % 5), sx, sy);
+      int types[] = {
+        ENEMY_TYPE_SKELETON,
+        ENEMY_TYPE_SKELETON,
+        ENEMY_TYPE_GOBLIN,
+        ENEMY_TYPE_GOBLIN,
+        ENEMY_TYPE_RAT,
+        ENEMY_TYPE_SLIME,
+        ENEMY_TYPE_SLIME,
+        ENEMY_TYPE_SPIDER
+      };
+      int enemy = types[rand() % 8];
+      pickspawn(&sx, &sy, 10);
+      enemy_new(enemy, sx, sy);
     } else {
       // skeleton goblin rat slime spider shaman
+      int types[] = {
+        ENEMY_TYPE_SKELETON,
+        ENEMY_TYPE_GOBLIN,
+        ENEMY_TYPE_GOBLIN,
+        ENEMY_TYPE_RAT,
+        ENEMY_TYPE_RAT,
+        ENEMY_TYPE_SLIME,
+        ENEMY_TYPE_SLIME,
+        ENEMY_TYPE_SPIDER,
+        ENEMY_TYPE_SPIDER,
+        ENEMY_TYPE_SPIDER,
+        ENEMY_TYPE_SHAMEN,
+        ENEMY_TYPE_SHAMEN,
+        ENEMY_TYPE_SHAMEN
+      };
+      int enemy = types[rand() % 13];
+      pickspawn(&sx, &sy, 8);
+      enemy_new(enemy, sx, sy);
+
+      if (layer == MAX_LAYER && roll(5) == 1)
+        enemy_new(ENEMY_TYPE_RAT, sx, sy);
+    }
+  }
+
+  // spawn boss
+  if (layer == MAX_LAYER) {
+    for (;;) {
+      int x = 1 + rand() % level_width-2;
+      int y = 1 + rand() % level_height-2;
+
+      int tilea = level.layers[level.layer].tiles[(y*level_width)+x];
+      int tileb = level.layers[level.layer].tiles[(y*level_width)+x+1];
+      int tilec = level.layers[level.layer].tiles[((y+1)*level_width)+x];
+      int tiled = level.layers[level.layer].tiles[((y+1)*level_width)+x+1];
+
+      if (tilea == TILE_WOOD_FLOOR && tileb == TILE_WOOD_FLOOR && tilec == TILE_WOOD_FLOOR && tiled == TILE_WOOD_FLOOR) {
+        int d = hypot(x - player->to.x, y - player->to.y);
+        if (d >= 15) {
+          enemy_new(ENEMY_TYPE_BOSS, x, y);
+          break;
+        }
+      }
+    }
+  }
+
+  count = MAX(3, (23 - layer) - (layer) + roll(3));
+  for (int i=0; i<count; i++) {
+    if (layer < 3) {
+      int items[] = {
+        ITEM_FIREBOLT,
+        ITEM_FIRESURGE,
+        ITEM_FIREPUSH,
+        ITEM_POT,
+        ITEM_POT,
+        ITEM_POT,
+        ITEM_FLESH
+      };
+      int item = items[rand() % 7];
+      pickspawn(&sx, &sy, 5);
+      int use_mod = MAX(1, layer / 3);
+      if (item < 2 || item > 8)
+        use_mod = 1;
+      item_new(sx, sy, item, item_uses[item] * use_mod);
+    } else if (layer >= 3 && layer <= 5) {
+      int items[] = {
+        ITEM_FIREBOLT,
+        ITEM_FIREBOLT,
+        ITEM_FIRESURGE,
+        ITEM_FIRESURGE,
+        ITEM_FIRESPRAY,
+        ITEM_FIRESPRAY,
+        ITEM_FIREPUSH,
+        ITEM_FIREPUSH,
+        ITEM_FIRESTORM,
+        ITEM_FIREJUMP,
+        ITEM_FIREJUMP,
+        ITEM_POT,
+        ITEM_POT,
+        ITEM_FLESH,
+        ITEM_FLESH
+      };
+      int item = items[rand() % 15];
+      pickspawn(&sx, &sy, 8);
+      int use_mod = MAX(1, layer / 3);
+      if (item < 2 || item > 8)
+        use_mod = 1;
+      item_new(sx, sy, item, item_uses[item] * use_mod);
+    } else {
+      int items[] = {
+        ITEM_FIREBOLT,
+        ITEM_FIREBOLT,
+        ITEM_FIREBOLT,
+        ITEM_FIREBOLT,
+        ITEM_FIRESURGE,
+        ITEM_FIRESURGE,
+        ITEM_FIRESURGE,
+        ITEM_FIRESPRAY,
+        ITEM_FIRESPRAY,
+        ITEM_FIRESPRAY,
+        ITEM_FIREPUSH,
+        ITEM_FIREPUSH,
+        ITEM_FIREPUSH,
+        ITEM_FIRESTORM,
+        ITEM_FIREJUMP,
+        ITEM_FIREJUMP,
+        ITEM_FIREJUMP,
+        ITEM_POT,
+        ITEM_FLESH
+      };
+      int item = items[rand() % 19];
       pickspawn(&sx, &sy, 10);
-      enemy_new(ENEMY_TYPE_SKELETON + (rand() % 6), sx, sy);
+      int use_mod = MAX(1, layer / 3);
+      if (item < 2 || item > 8)
+        use_mod = 1;
+      item_new(sx, sy, item, item_uses[item] * use_mod);
     }
   }
 }
 
 void godown()
 {
+  // end game
+  if (layer > MAX_LAYER) {
+    char buff[256];
+    text_log_add("You have defeated the rat king and escaped");
+    sprintf(buff, "You where level %i", plevel);
+    text_log_add(buff);
+    sprintf(buff, "You have slain %i", pkills);
+    text_log_add(buff);
+    player->alive = 0;
+    return;
+  }
+
   update = 0;
 
   // generate the level
@@ -103,6 +246,8 @@ void godown()
   while (!gen(&level.layers[0])) {};
   level_width  = level.layers[level.layer].width;
   level_height = level.layers[level.layer].height;
+
+  item_init();
 
   // reinit entity stuff
   entity_init();
@@ -115,11 +260,18 @@ void godown()
 
   player_reinit();
 
-  spawn();
+  text_log_add("You descend further into the dungeon");
+
+  if (layer == 3)
+    text_log_add("You hear a scuttle in the distance");
+  if (layer == 7)
+    text_log_add("You sense an evil presence");
 
   // set exit
   if (layer < MAX_LAYER) {
     level.layers[level.layer].tiles[(level.layers[level.layer].ey*level_width)+level.layers[level.layer].ex] = TILE_EXIT;
+  } else {
+    text_log_add("You sense the presence of a powerful creature");
   }
 
   for (int i=0; i<CHUNK_COUNT; i++) {
@@ -136,10 +288,9 @@ void godown()
   // reinit spell system
   spell_init();
 
-  // reinit text log stuff
-  text_init();
-
   layer++;
+
+  spawn();
 }
 
 void start()
@@ -150,6 +301,11 @@ void start()
   while (!gen(&level.layers[0])) {};
   level_width  = level.layers[level.layer].width;
   level_height = level.layers[level.layer].height;
+
+  layer = 0;
+  update = 0;
+
+  item_init();
 
   // init entity stuff
   entity_init();
@@ -199,6 +355,10 @@ void loop()
       // load textures
       tex_tiles = texture_load("tiles.png", &tiles_tex_width, &tiles_tex_height);
       SDL_SetTextureBlendMode(tex_tiles, SDL_BLENDMODE_BLEND);
+
+      // load menu bg
+      tex_menu = texture_load("cover.png", NULL, NULL);
+      SDL_SetTextureBlendMode(tex_menu, SDL_BLENDMODE_BLEND);
 
       // screen render target
       tex_map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, window_width, game_height);
@@ -431,7 +591,7 @@ void loop()
   fromy = floor(cy / tile_height);
   tox = MAX(0, MIN(fromx + (window_width / tile_width), level_width));
   toy = MAX(0, MIN(fromy + (game_height / tile_height) + 2, level_height));
-  int count = ((window_width / tile_width) + 2) * 4;
+  int count = ((tox - fromx) + 2) * 4;
 
   int errx = 0;
   if (fromx < 0)
@@ -441,6 +601,8 @@ void loop()
   fromx += errx;
   tox -= errx;
   count -= errx * 4;
+  if (tox >= level_width)
+    count -= 8 + (tox - level_width) * 4;
 
   for (int y=fromy; y<toy; y++) {
     if (y < 0 || y > level_height)
@@ -461,11 +623,33 @@ void loop()
   SDL_SetRenderTarget(renderer, NULL);
   SDL_RenderClear(renderer);
 
+  // render 1
+  if (menu) {
+    if (!menuinout)
+      menualpha += 0.4f * delta_time;
+    if (!menuinout && menualpha >= 1.0f) {
+      menualpha = 4.0f;
+      menuinout = 1;
+    }
+    if (menuinout && menualpha > 0)
+      menualpha -= 0.4f * delta_time;
+    if (menuinout && menualpha <= 0.0f) {
+      menu = 0;
+    }
+
+    SDL_SetTextureAlphaMod(tex_menu, MAX(0, MIN(255, (int)(255.0f * menualpha))));
+    SDL_RenderCopy(renderer, tex_menu, NULL, NULL);
+    SDL_RenderPresent(renderer);
+    return;
+  }
+
   // render the level
   r.x = 0, r.y = 0, r.w = window_width, r.h = game_height;
   SDL_RenderCopy(renderer, tex_map, NULL, &r);
 
   spell_render_fire();
+
+  item_render();
 
   entity_render();
 
@@ -498,15 +682,46 @@ void loop()
   SDL_SetTextureAlphaMod(tex_font, 255);
   text_render(buff, 16, 16);
 
+  if (experience > player->hp_max / 2) {
+    player->hp_max++;
+    player->hp = player->hp_max;
+    plevel++;
+    experience = 0;
+    text_log_add("You feel stronger");
+  }
+
+  // max exp
+  for (int i=0; i<player->hp_max / 2; i++)
+    buff[i] = (char)16;
+  buff[player->hp_max / 2] = '\0';
+  SDL_SetTextureColorMod(tex_font, 255, 255, 255);
+  SDL_SetTextureAlphaMod(tex_font, 100);
+  text_render(buff, 16, 32);
+
+  // current exp
+  for (int i=0; i<experience; i++)
+    buff[i] = (char)16;
+  buff[experience] = '\0';
+  SDL_SetTextureColorMod(tex_font, 104, 174, 255);
+  SDL_SetTextureAlphaMod(tex_font, 255);
+  text_render(buff, 16, 32);
+
   // inventory
-  int y = 48;
+  int y = 64;
   SDL_SetTextureColorMod(tex_font, 255, 255, 255);
   SDL_SetTextureAlphaMod(tex_font, 255);
   sprintf(buff, "%c backpack %c", 4, 4);
   text_render(buff, 16, y);
-  for (int i=0; i<5; i++) {
+  for (int i=0; i<INVENTORY_MAX; i++) {
     y += 16;
-    sprintf(buff, "[%i] %c %s\n", i+1, 26, "empty");
+    if (inventory[i]) {
+      if (uses[i])
+        sprintf(buff, "[%i] %c %s (%i)\n", i+1, 26, item_string[inventory[i]], uses[i]);
+      else
+        sprintf(buff, "[%i] %c %s (inf)\n", i+1, 26, item_string[inventory[i]], uses[i]);
+    } else {
+      sprintf(buff, "[%i] %c %s\n", i+1, 26, item_string[inventory[i]], uses[i]);
+    }
     text_render(buff, 16, y);
   }
   y+=32;
@@ -514,6 +729,12 @@ void loop()
   text_render(buff, 16, y);
   y+=16;
   sprintf(buff, "[c] %c %s\n", 26, "toggle door");
+  text_render(buff, 16, y);
+  y+=16;
+  sprintf(buff, "[d] %c %s\n", 26, "drop item");
+  text_render(buff, 16, y);
+  y+=16;
+  sprintf(buff, "[f] %c %s\n", 26, "fall down");
   text_render(buff, 16, y);
   y+=16;
   sprintf(buff, "[space] %c %s\n", 26, "interact");
@@ -527,7 +748,7 @@ void loop()
 
   // handle reset
   if (!player->alive) {
-    text_render("press R to restart", 16, 214);
+    text_render("press R to restart", 16, 296);
     if (keys_down[SDL_SCANCODE_R]) {
       init = 0;
     }
@@ -539,15 +760,35 @@ void loop()
 
 void keypressed(int key)
 {
+  if (menu) {
+    menuinout = 1;
+    menualpha = MIN(1.0f, menualpha);
+    return;
+  }
+
   player_keypress(key);
 
   if (key == SDL_SCANCODE_SPACE && check_tile(player->to.x, player->to.y) == TILE_EXIT) {
+    text_log_add("The stairs crumble behind you, sealing your fate");
     godown();
   }
 }
 
 void mousepress(int key)
 {
+  if (menu)
+    return;
+
+  int tmx = ((mx + cx)) / tile_width;
+  int tmy = ((my + cy)) / tile_height;
+  tmx = MAX(0, MIN(tmx, level_width));
+  tmy = MAX(0, MIN(tmy, level_height));
+
+  if (tmx == player->to.x && tmy == player->to.y && check_tile(player->to.x, player->to.y) == TILE_EXIT) {
+    text_log_add("The stairs crumble behind you, sealing your fate");
+    godown();
+  }
+
   player_mousepress(key, mx, my);
 }
 

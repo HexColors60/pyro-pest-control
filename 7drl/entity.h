@@ -3,13 +3,14 @@
 
 #include "math.h"
 
-#define ENTITY_MAX 1024
+#define ENTITY_MAX 256
 
 typedef struct {
   fvec2_t pos, to;
   ivec2_t tiles[2];
   int alive, animated, frame;
   int updating, hp, hp_max, lowhp, resist;
+  int cantopen, large, solid;
 
   int walking, speed, type, aggro;
   int last_attack, stuck;

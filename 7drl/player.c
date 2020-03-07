@@ -3,19 +3,134 @@
 #include "generator.h"
 #include "spell.h"
 #include "text.h"
+#include "item.h"
 
 entity_t *player = NULL;
 int *dmap_to_player = NULL, *dmap_from_player = NULL;
 int *dmap_to_mouse = NULL;
 uint8_t *light_map = NULL;
 
-char inventory[4] = {0};
+int inventory[INVENTORY_MAX] = {0};
+int uses[INVENTORY_MAX] = {0};
+int active_slot = -1;
+
+int speed_boost = 0;
+int heal_rate = 0;
+
+int experience = 0;
+int plevel = 0;
+int pkills = 0;
 
 int aiming = 0, flame = 1;
-int active_spell = CLOSE_DOOR;
+int active_spell = -1;
 ivec2_t fire_to;
 
 int last_move_x = -DIJ_MAX, last_move_y = -DIJ_MAX;
+int path_x, path_y;
+
+int inventory_add(int item, int use)
+{
+  update = 1;
+
+  for (int i=0; i<INVENTORY_MAX; i++) {
+    if (!inventory[i]) {
+      inventory[i] = item;
+      uses[i] = use;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+void inventory_remove(int index)
+{
+  update = 1;
+
+  if (inventory[index]) {
+    if (inventory[index] == ITEM_FIRETORCH)
+      text_log_add("You drop your firetorch, the room darkens");
+    item_new(player->to.x, player->to.y, inventory[index], uses[index]);
+    inventory[index] = 0;
+    uses[index] = 0;
+  }
+}
+
+void inventory_use(int index)
+{
+  update = 1;
+  active_slot = index;
+
+  switch (inventory[index]) {
+    case ITEM_FIRETORCH: {
+      text_log_add("Your torch is already lit");
+      break;
+    }
+    case ITEM_FIREBOLT: {
+      active_spell = SPELL_FIREBOLT;
+      text_log_add("You ready a firebolt");
+      aiming = 1;
+      break;
+    }
+    case ITEM_FIRESURGE: {
+      active_spell = SPELL_FIRESURGE;
+      text_log_add("You ready a firesurge");
+      aiming = 1;
+      break;
+    }
+    case ITEM_FIRESTORM: {
+      active_spell = SPELL_FIRESTORM;
+      text_log_add("You ready a firestorm");
+      aiming = 1;
+      break;
+    }
+    case ITEM_FIRESPRAY: {
+      active_spell = SPELL_FIRESPRAY;
+      text_log_add("You ready a firespray");
+      aiming = 1;
+      break;
+    }
+    case ITEM_FIREPUSH: {
+      active_spell = SPELL_FIREPUSH;
+      text_log_add("You ready a firepush");
+      aiming = 1;
+      break;
+    }
+    case ITEM_FIREJUMP: {
+      active_spell = SPELL_FIREJUMP;
+      text_log_add("You ready a firejump");
+      aiming = 1;
+      break;
+    }
+    case ITEM_SPIRIT: {
+      active_spell = SPELL_SPIRIT;
+      text_log_add("You ready a spirit orb");
+      aiming = 1;
+      break;
+    }
+    case ITEM_FOOD: {
+      player->hp = MIN(player->hp + 2 + roll(2) + (2 * plevel), player->hp_max);
+      text_log_add("You consume some of the cooked flesh and recover some health");
+      uses[index]--;
+      if (uses[index] <= 0)
+        inventory[index] = 0;
+      break;
+    }
+    case ITEM_FLESH: {
+      player->hp = MIN(player->hp + 1, player->hp_max);
+      text_log_add("You consume the raw flesh and recover a small amount of health");
+      inventory[index] = 0;
+      break;
+    }
+    case ITEM_POT: {
+      text_log_add("You consume the potion");
+      text_log_add("You feel faster");
+      speed_boost = 5 + roll(3);
+      inventory[index] = 0;
+      break;
+    }
+  }
+}
 
 void player_init(int x, int y)
 {
@@ -26,6 +141,7 @@ void player_init(int x, int y)
   // initialize an entity for the player
   player = entity_new();
   player->onhit  = player_hit;
+  player->ondeath= player_die;
   player->update = NULL;
   player->alive  = 1;
   player->hp     = 10;
@@ -38,6 +154,15 @@ void player_init(int x, int y)
   fire_to.x      = x;
   fire_to.y      = y;
   aiming         = 0;
+
+  for (int i=0; i<INVENTORY_MAX; i++)
+    inventory[i] = 0;
+
+  inventory[0] = ITEM_FIRETORCH;
+  inventory[1] = ITEM_FIREBOLT;
+  uses[1] = item_uses[ITEM_FIREBOLT];
+  inventory[2] = ITEM_FOOD;
+  uses[2] = item_uses[ITEM_FOOD];
 
   // tile 16
   entity_set_tile(player, 0, TILEI_PLAYER);
@@ -66,6 +191,20 @@ void player_reinit()
   player_light();
 
   aiming = 0;
+  plevel = 0;
+  pkills = 0;
+  experience = 0;
+}
+
+void player_die(entity_t *e)
+{
+  char buff[256];
+  sprintf(buff, "You have perished on floor %i", layer);
+  text_log_add(buff);
+  sprintf(buff, "You where level %i", plevel);
+  text_log_add(buff);
+  sprintf(buff, "You have slain %i", pkills);
+  text_log_add(buff);
 }
 
 void player_hit(entity_t *e, int damage, int type)
@@ -74,6 +213,7 @@ void player_hit(entity_t *e, int damage, int type)
     char buff[512];
     sprintf(buff, "You take %i damage", damage);
     text_log_add(buff);
+    heal_rate = HEALRATE;
   }
 
   if (type == SPELL_WEB) {
@@ -104,7 +244,8 @@ void player_light()
       walls[i] = solid[i];
   walls[SOLID_COUNT-1] = TILE_DOOR_CLOSED;
 
-  int distance = flame ? 18 : 48;
+  int distance = flame ? 50 : 16;
+  distance = MAX(4, distance - (layer * 2));
 
   for (int i=0; i<360; i++) {
     float fromx = player->to.x;
@@ -119,7 +260,9 @@ void player_light()
       // get position and light value
       int x = MAX(0, MIN(positions[j].x, level_width));
       int y = MAX(0, MIN(positions[j].y, level_height));
-      int val = 255 - MAX(0, 255 - MIN((j * distance), 255));
+      int val = 255 - MAX(0, 255 - MIN(((float)j / (float)distance)*255, 255));
+      if (count < distance)
+        val = 255 - MAX(0, 255 - MIN(((float)j / (float)count)*255, 255));
 
       // set pixeldata
       int index = ((y*level_width)+x)*4;
@@ -163,21 +306,40 @@ void player_fire()
   aiming = 0;
   update = 1;
 
+  int slot = active_slot;
+  if (active_slot > -1) {
+    uses[active_slot]--;
+    if (uses[active_slot] <= 0) {
+      inventory[active_slot] = 0;
+      uses[active_slot] = 0;
+    }
+    active_slot = -1;
+  }
+
+  char buff[256];
   switch (active_spell) {
     case SPELL_FIREBOLT: {
       text_log_add("You cast a fireball");
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
       break;
     }
     case SPELL_FIRESURGE: {
       text_log_add("You cast a surge of fireballs");
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
       break;
     }
     case SPELL_FIRESTORM: {
       text_log_add("You cast a firestorm");
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
       break;
     }
     case SPELL_FIRESPRAY: {
       text_log_add("You cast firespray");
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
       break;
     }
     case SPELL_FIREPUSH: {
@@ -188,8 +350,10 @@ void player_fire()
       text_log_add("You cast firepush");
       int dx = fire_to.x - player->to.x;
       int dy = fire_to.y - player->to.y;
-      entity_push(player->to.x+dx, player->to.y+dy, dx*6, dy*6);
+      entity_push(player->to.x+dx, player->to.y+dy, dx*10, dy*10);
       entity_push(player->to.x, player->to.y, -dx*2, -dy*2);
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
       return;
     }
     case SPELL_FIREJUMP: {
@@ -200,7 +364,15 @@ void player_fire()
       text_log_add("You cast firejump");
       player->to.x = fire_to.x;
       player->to.y = fire_to.y;
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
       return;
+    }
+    case SPELL_SPIRIT: {
+      text_log_add("You cast spirit orb");
+      sprintf(buff, "The remaining number of uses are %i", uses[slot]);
+      text_log_add(buff);
+      break;
     }
     case CLOSE_DOOR: {
       if (player->to.x == fire_to.x && player->to.y == fire_to.y) {
@@ -211,10 +383,32 @@ void player_fire()
       int tile = check_tile(fire_to.x, fire_to.y);
       if (tile == TILE_DOOR_CLOSED) {
         update_chunk(fire_to.x*tile_width, fire_to.y*tile_height, TILE_DOOR_OPEN);
-        text_log_add("You open the door");
+        text_log_add("The door opens");
       } else if (tile == TILE_DOOR_OPEN) {
         update_chunk(fire_to.x*tile_width, fire_to.y*tile_height, TILE_DOOR_CLOSED);
-        text_log_add("You close the door");
+        text_log_add("The door closes");
+      }
+      return;
+    }
+    case DROP_ITEM: {
+      return;
+    }
+    case FALL_DOWN: {
+      int tile = check_tile(fire_to.x, fire_to.y);
+      if (tile == TILE_WOOD_HOLE) {
+        if (layer == MAX_LAYER) {
+          text_log_add("You refuse to jump into the abyss below");
+        } else {
+          player->hp -= (player->hp_max / 2);
+          if (player->hp > 0) {
+            text_log_add("You fall down and take some damage");
+            godown();
+          } else {
+            text_log_add("You fall to your death");
+            player_die(player);
+            player->alive = 0;
+          }
+        }
       }
       return;
     }
@@ -231,6 +425,23 @@ int player_update()
     player->hp = 0;
     return 1;
   }
+
+  player->speed = 2;
+  if (speed_boost) {
+    speed_boost--;
+    player->speed = 4;
+  }
+
+  heal_rate--;
+  if (heal_rate <= 0) {
+    player->hp = MIN(player->hp+1, player->hp_max);
+    heal_rate = HEALRATE;
+  }
+
+  flame = 0;
+  for (int i=0; i<INVENTORY_MAX; i++)
+    if (inventory[i] == ITEM_FIRETORCH)
+      flame = 1;
 
   if (player->walking)
     update = 1;
@@ -270,8 +481,15 @@ int player_update()
 
 void player_render()
 {
-  if (!player->alive)
+  if (!player->alive) {
+    update = 1;
     return;
+  }
+
+  if (!aiming) {
+    active_slot = -1;
+    active_spell = -1;
+  }
 
   SDL_Rect ra, rb;
   if (player->stuck) {
@@ -343,31 +561,78 @@ void player_render()
     last_move_y = tmy;
 
     int tile = level.layers[level.layer].tiles[(tmy*level_width)+tmx];
-    if (check_solid(tile))
-      return;
+    if (!check_solid(tile)) {
+      // regenerate dmap to mouse
+      char *tiles = level.layers[level.layer].tiles;
+      for (int i=0; i<level_width*level_height; i++)
+        dmap_to_mouse[i] = DIJ_MAX;
 
-    // regenerate dmap to mouse
-    char *tiles = level.layers[level.layer].tiles;
-    for (int i=0; i<level_width*level_height; i++)
-      dmap_to_mouse[i] = DIJ_MAX;
+      dmap_to_mouse[(tmy*level_width)+tmx] = 0;
 
-    dmap_to_mouse[(tmy*level_width)+tmx] = 0;
+      int walls2[32] = {-1};
+      for (int i=0; i<SOLID_COUNT; i++)
+        walls2[i] = solid[i];
 
-    int walls2[32] = {-1};
-    for (int i=0; i<SOLID_COUNT; i++)
-      walls2[i] = solid[i];
-
-    int w = (window_width/tile_width)/2;
-    int h = (window_height/tile_height)/2;
-    int fromx = player->to.x - w;
-    int fromy = player->to.y - h;
-    int tox   = player->to.x + w;
-    int toy   = player->to.y + h;
-    dijkstra(dmap_to_mouse, tiles, walls2, fromx, fromy, tox, toy, level_width, level_height);
-
+      int w = (window_width/tile_width)/2;
+      int h = (window_height/tile_height)/2;
+      int fromx = player->to.x - w;
+      int fromy = player->to.y - h;
+      int tox   = player->to.x + w;
+      int toy   = player->to.y + h;
+      dijkstra(dmap_to_mouse, tiles, walls2, fromx, fromy, tox, toy, level_width, level_height);
+    }
   }
 
   player->dmap = dmap_to_mouse;
+
+  if (aiming) {
+    switch (active_spell) {
+      case SPELL_FIREBOLT: {
+        text_render("casting firebolt [dir]", 16, 296);
+        break;
+      }
+      case SPELL_FIRESURGE: {
+        text_render("casting firesurge [dir]", 16, 296);
+        break;
+      }
+      case SPELL_FIRESTORM: {
+        text_render("casting firestorm [dir]", 16, 296);
+        break;
+      }
+      case SPELL_FIRESPRAY: {
+        text_render("casting firespray [dir]", 16, 296);
+        break;
+      }
+      case SPELL_FIREPUSH: {
+        text_render("casting firepush [dir]", 16, 296);
+        break;
+      }
+      case SPELL_FIREJUMP: {
+        text_render("casting firejump [dir]", 16, 296);
+        break;
+      }
+      case SPELL_WEB: {
+        text_render("casting web [dir]", 16, 296);
+        break;
+      }
+      case SPELL_SPIRIT: {
+        text_render("casting spirit orb [dir]", 16, 296);
+        break;
+      }
+      case CLOSE_DOOR: {
+        text_render("toggle door [dir]", 16, 296);
+        break;
+      }
+      case DROP_ITEM: {
+        text_render("drop item [1-5]", 16, 296);
+        break;
+      }
+      case FALL_DOWN: {
+        text_render("fall down hole [dir]", 16, 296);
+        break;
+      }
+    }
+  }
 
   if (aiming)
     return;
@@ -391,7 +656,7 @@ void player_render()
     if (!lowest)
       break;
 
-    if (!((i/2) % 2))
+    if (!((i/player->speed) % 2))
       SDL_SetTextureColorMod(tex_tiles, 255, 46, 136);
     else
       SDL_SetTextureColorMod(tex_tiles, 46, 255, 136);
@@ -426,6 +691,8 @@ void player_render()
     if (lowest != DIJ_MAX) {
       ex = findx;
       ey = findy;
+      path_x = findx;
+      path_y = findy;
       rb.x = (findx * tile_width) - cx;
       rb.y = (findy * tile_height) - cy;
 
@@ -435,14 +702,15 @@ void player_render()
     }
   }
   SDL_SetTextureColorMod(tex_tiles, 255, 255, 255);
+  SDL_SetTextureAlphaMod(tex_tiles, 255);
 
-  int turns = MAX(1, (i+1)/2);
+  int turns = ((MAX(i,1)-1)/player->speed)+1;
   char buff[512];
   if (turns == 1)
     sprintf(buff, "%i turn", turns);
   else
     sprintf(buff, "%i turns", turns);
-  text_render(buff, 16, 214);
+  text_render(buff, 16, 296);
   /*----------------------------------------*/
 }
 
@@ -453,10 +721,66 @@ void player_keypress(int key)
     return;
   }
 
+  if (key == SDL_SCANCODE_SPACE) {
+    item_t *item = item_take(player->to.x, player->to.y);
+
+    if (item) {
+      if (!inventory_add(item->item, item->uses)) {
+        item_new(player->to.x, player->to.y, item->item, item->uses);
+      }
+    }
+  }
+
+  if (active_spell == DROP_ITEM) {
+    if (key == SDL_SCANCODE_1)
+      inventory_remove(0);
+    if (key == SDL_SCANCODE_2)
+      inventory_remove(1);
+    if (key == SDL_SCANCODE_3)
+      inventory_remove(2);
+    if (key == SDL_SCANCODE_4)
+      inventory_remove(3);
+    if (key == SDL_SCANCODE_5)
+      inventory_remove(4);
+    if (key == SDL_SCANCODE_6)
+      inventory_remove(5);
+
+    active_spell = -1;
+    aiming = 0;
+  }
+
+  if (aiming) {
+    text_log_add("You stop casting");
+  }
+
   active_spell = -1;
   aiming = 0;
+
+  if (active_spell < 0) {
+    if (key == SDL_SCANCODE_1)
+      inventory_use(0);
+    if (key == SDL_SCANCODE_2)
+      inventory_use(1);
+    if (key == SDL_SCANCODE_3)
+      inventory_use(2);
+    if (key == SDL_SCANCODE_4)
+      inventory_use(3);
+    if (key == SDL_SCANCODE_5)
+      inventory_use(4);
+    if (key == SDL_SCANCODE_6)
+      inventory_use(5);
+  }
+
   if (key == SDL_SCANCODE_C) {
     active_spell = CLOSE_DOOR;
+    aiming = 1;
+  }
+  if (key == SDL_SCANCODE_D) {
+    active_spell = DROP_ITEM;
+    aiming = 1;
+  }
+  if (key == SDL_SCANCODE_F) {
+    active_spell = FALL_DOWN;
     aiming = 1;
   }
 }
@@ -476,12 +800,27 @@ void player_mousepress(int button, int mx, int my)
   tmx = MAX(0, MIN(tmx, level_width));
   tmy = MAX(0, MIN(tmy, level_height));
 
+  if (!update && tmx == player->to.x && tmy == player->to.y) {
+    item_t *item = item_take(player->to.x, player->to.y);
+
+    if (item) {
+      if (!inventory_add(item->item, item->uses)) {
+        item_new(player->to.x, player->to.y, item->item, item->uses);
+      }
+    } else {
+      text_log_add("You rest for a turn");
+    }
+
+    update = 1;
+    return;
+  }
+
   if (player->walking) {
     player->walking = 0;
     return;
   }
 
-  int tile = level.layers[level.layer].tiles[(tmy*level_width)+tmx];
+  int tile = level.layers[level.layer].tiles[(path_y*level_width)+path_x];
   if (check_solid(tile))
     return;
 

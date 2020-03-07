@@ -822,6 +822,7 @@ int generate_chunks(cells_t *c, chunk_t *level)
       chunkindex++;
     }
   }
+  width++; height++;
 
   // iterate over chunks and copy them
   // to the map at the appropriate locations
@@ -863,6 +864,7 @@ int generate_chunks(cells_t *c, chunk_t *level)
       }
     }
   }
+
   int rwidth  = (width-minx);
   int rheight = (height-miny);
   char *tmp = malloc(sizeof(char) * rwidth * rheight);
@@ -1085,7 +1087,7 @@ int gen(map_t *map)
 {
   // generate initial level layout
   cells_t cells;
-  while (!generate_cells(&cells, 50, 1)) {
+  while (!generate_cells(&cells, 40, 1)) {
     printf("Failed generating cells, retrying\n");
   }
 

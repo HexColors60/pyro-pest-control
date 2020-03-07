@@ -7,6 +7,7 @@
 #define CHUNK_COUNT  (16*16)  // max amount of chunks we will need
 #define CHUNK_WIDTH  512      // size in pixels
 #define CHUNK_HEIGHT 528      // size in pixels
+#define MAX_LAYER 10
 
 extern SDL_Window *window;
 extern SDL_Renderer *renderer;
@@ -61,6 +62,9 @@ typedef struct {
 extern level_t level;
 extern level_texture_t level_textures;
 extern int level_width, level_height;
+extern int layer;
+
+void godown();
 
 static void update_chunk(int x, int y, int tile)
 {
