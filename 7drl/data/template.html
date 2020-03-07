@@ -62,9 +62,16 @@
         canvas: (function() {
           var canvas = document.getElementById('canvas');
           canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+            // canvas.onkeydown = canvas.onkeyup = function(e){
+            //   e.preventDefault();
+            //   return false;
+            // }
           return canvas;
         })(),
       };
+    </script>
+    <script>
+      window.onload = function () { window.focus(); } window.onclick = function () { window.focus(); };
     </script>
     {{{ SCRIPT }}}
   </body>
