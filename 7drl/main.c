@@ -72,7 +72,7 @@ void pickspawn(int *xpos, int *ypos, int dist)
 void spawn()
 {
   // enemy spawns
-  int count = MIN((layer+2) * 6, 50) + roll(MAX(layer, 1));
+  int count = MIN((layer+2) * 5, 50) + roll(MAX(layer, 1));
   int sx, sy;
   for (int i=0; i<count; i++) {
     if (layer < 3) {

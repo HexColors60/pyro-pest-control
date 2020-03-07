@@ -109,7 +109,7 @@ void inventory_use(int index)
       break;
     }
     case ITEM_FOOD: {
-      player->hp = MIN(player->hp + 1 + roll(2) + plevel, player->hp_max);
+      player->hp = MIN(player->hp + 2 + roll(2) + plevel, player->hp_max);
       text_log_add("You consume some of the cooked flesh and recover some health");
       uses[index]--;
       if (uses[index] <= 0)
@@ -350,7 +350,7 @@ void player_fire()
       text_log_add("You cast firepush");
       int dx = fire_to.x - player->to.x;
       int dy = fire_to.y - player->to.y;
-      entity_push(player->to.x+dx, player->to.y+dy, dx*16, dy*16);
+      entity_push(player->to.x+dx, player->to.y+dy, dx*20, dy*20);
       entity_push(player->to.x, player->to.y, -dx*2, -dy*2);
       sprintf(buff, "The remaining number of uses are %i", uses[slot]);
       text_log_add(buff);
@@ -716,6 +716,11 @@ void player_render()
 
 void player_keypress(int key)
 {
+  if (!player->alive) {
+    update = 1;
+    return;
+  }
+
   if (player->walking) {
     player->walking = 0;
     return;
@@ -787,6 +792,10 @@ void player_keypress(int key)
 
 void player_mousepress(int button, int mx, int my)
 {
+  if (!player->alive) {
+    update = 1;
+    return;
+  }
   if (aiming && active_spell > -1) {
     player_fire();
     return;

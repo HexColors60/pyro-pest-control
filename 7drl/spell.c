@@ -361,9 +361,9 @@ void spell_hit(spell_t *spell)
 
   switch (spell->spell) {
     case SPELL_FIRESTORM: {
-      for (int i=0; i<32; i++) {
-        int x = -6 + roll(10);
-        int y = -6 + roll(10);
+      for (int i=0; i<48; i++) {
+        int x = -4 + roll(7);
+        int y = -4 + roll(7);
         spell_new(SPELL_FIREBOLT, spell->to.x-x, spell->to.y-30-y, spell->to.x+x, spell->to.y+y);
       }
       break;

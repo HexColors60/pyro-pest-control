@@ -143,6 +143,8 @@ void enemy_new(int enemy, int x, int y)
     }
   }
 
+  e->hp += MAX(1, layer / 3) * 2;
+
   e->hp_max = e->hp;
   e->idistance = e->distance;
   entity_set_tile(e, 0, tile);
@@ -184,7 +186,7 @@ void boss_update(entity_t *e)
     e->aggro = 0;
   }
 
-  if (e->aggro && roll(4) == 1) {
+  if (e->aggro && roll(2) == 1) {
     enemy_new(ENEMY_TYPE_RAT, e->to.x + rand() % 2, e->to.y + rand() % 2);
     text_log_add("A rat breaks free from the rat king");
   }
@@ -243,7 +245,7 @@ void enemy_die(entity_t *e)
   if (!e->alive)
     return;
 
-  experience++;
+  experience += MAX(1, layer / 3);
   pkills++;
 
   char buff[512];
@@ -255,13 +257,13 @@ void enemy_die(entity_t *e)
     case ENEMY_TYPE_GOBLIN: {
       text_log_add("The goblin has died");
       if (roll(4) == 1)
-        item_new(e->to.x, e->to.y, ITEM_FLESH, item_uses[ITEM_FLESH]);
+        item_new(e->to.x, e->to.y, ITEM_FLESH, item_uses[ITEM_FLESH] * MAX(1, layer / 3));
       break;
     }
     case ENEMY_TYPE_RAT: {
       text_log_add("The rat has died");
       if (roll(2) == 1)
-        item_new(e->to.x, e->to.y, ITEM_FLESH, item_uses[ITEM_FLESH]);
+        item_new(e->to.x, e->to.y, ITEM_FLESH, item_uses[ITEM_FLESH] * MAX(1, layer / 3));
       break;
     }
     case ENEMY_TYPE_SLIME: {
@@ -275,9 +277,9 @@ void enemy_die(entity_t *e)
     case ENEMY_TYPE_SHAMEN: {
       text_log_add("The shaman has died");
       if (roll(4) == 1)
-        item_new(e->to.x, e->to.y, ITEM_FLESH, item_uses[ITEM_FLESH]);
-      if (roll(20) == 1)
-        item_new(e->to.x, e->to.y, ITEM_SPIRIT, item_uses[ITEM_SPIRIT]);
+        item_new(e->to.x, e->to.y, ITEM_FLESH, item_uses[ITEM_FLESH] * MAX(1, layer / 3));
+      if (roll(10) == 1)
+        item_new(e->to.x, e->to.y, ITEM_SPIRIT, item_uses[ITEM_SPIRIT] * MAX(1, layer / 3));
       break;
     }
     case ENEMY_TYPE_BSLIME: {

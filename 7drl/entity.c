@@ -3,6 +3,7 @@
 #include "generator.h"
 #include "player.h"
 #include "text.h"
+#include "spell.h"
 #include <string.h>
 
 entity_t *entity_list = NULL;
@@ -62,6 +63,9 @@ void entity_hit(int x, int y, int damage, int type)
     }
 
     damage = damage > 0 ? MAX(1, damage - e->resist) + (roll(2) - 1) : 0;
+
+    if (type == SPELL_WEB)
+      damage = 0;
 
     if (e->onhit)
       e->onhit(e, damage, type);
