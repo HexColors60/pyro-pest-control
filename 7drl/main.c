@@ -124,13 +124,13 @@ void spawn()
       pickspawn(&sx, &sy, 8);
       enemy_new(enemy, sx, sy);
 
-      if (layer == MAX_LAYER && roll(5) == 1)
+      if (layer == MAX_LAYER && roll(10) == 1)
         enemy_new(ENEMY_TYPE_RAT, sx, sy);
     }
   }
 
   // spawn boss
-  if (layer == MAX_LAYER) {
+  if (layer > MAX_LAYER) {
     for (;;) {
       int x = 1 + rand() % level_width-2;
       int y = 1 + rand() % level_height-2;
@@ -165,8 +165,6 @@ void spawn()
       int item = items[rand() % 7];
       pickspawn(&sx, &sy, 5);
       int use_mod = MAX(1, layer / 3);
-      if (item < 2 || item > 8)
-        use_mod = 1;
       item_new(sx, sy, item, item_uses[item] * use_mod);
     } else if (layer >= 3 && layer <= 5) {
       int items[] = {
@@ -189,8 +187,6 @@ void spawn()
       int item = items[rand() % 15];
       pickspawn(&sx, &sy, 8);
       int use_mod = MAX(1, layer / 3);
-      if (item < 2 || item > 8)
-        use_mod = 1;
       item_new(sx, sy, item, item_uses[item] * use_mod);
     } else {
       int items[] = {
@@ -217,8 +213,6 @@ void spawn()
       int item = items[rand() % 19];
       pickspawn(&sx, &sy, 10);
       int use_mod = MAX(1, layer / 3);
-      if (item < 2 || item > 8)
-        use_mod = 1;
       item_new(sx, sy, item, item_uses[item] * use_mod);
     }
   }

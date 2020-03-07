@@ -65,7 +65,7 @@ static int item_uses[ITEM_NUM] = {
   10,  // spirit
 
   2, // food
-  1, // flesh
+  2, // flesh
   1, // pot
 };
 

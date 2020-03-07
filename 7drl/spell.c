@@ -183,7 +183,7 @@ void spell_newr(int s, int x0, int y0, int x1, int y1)
   switch (s) {
     case SPELL_FIREBOLT: {
       spell->range      = spell_get_range(s);
-      spell->firechance = 8;
+      spell->firechance = 7;
       spell->speed      = 20;
       spell->damage     = 4;
       tile = TILE_SPELL_FIREBOLT;
